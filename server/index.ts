@@ -9,7 +9,7 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import { AppError, findApplicationRoot, getModuleDirectory, getUpdateCheckOptOutVariable, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -21,6 +21,7 @@ import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { createGitModule } from './modules/git/index.js';
 import {
+    authenticateDownloadToken,
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
@@ -44,7 +45,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 import { voiceRoutes } from './modules/voice/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
-import { fileTreeRoutes } from './modules/file-tree/index.js';
+import { fileDownloadRoutes, fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
@@ -69,6 +70,13 @@ const RUNNING_VERSION = (() => {
         return null;
     }
 })();
+// Operator opt-out for automatic update checks. Read once at startup like the
+// values above and published on `/health` so the prebuilt frontend bundle can
+// honor it at runtime (a build-time VITE_ variable cannot reach an npm install).
+// The winning variable is kept so the startup banner can name it: a correct
+// opt-out and a mistyped one otherwise look identical (both silent).
+const updateCheckOptOutVariable = getUpdateCheckOptOutVariable(process.env);
+const updateCheckDisabled = updateCheckOptOutVariable !== null;
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
@@ -118,7 +126,17 @@ const wss = createWebSocketServer(server, {
 // Make WebSocket server available to routes
 app.locals.wss = wss;
 
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
+// Chat interleaves browser-stamped optimistic rows with transcript rows the
+// provider CLI stamped with THIS machine's clock, so the client measures the
+// offset between the two. `Date` alone is not enough: nginx hides the upstream
+// `Date` and substitutes its own, so an app-owned header carries the clock that
+// actually writes the transcripts. Neither is CORS-safelisted, so both are
+// exposed for the desktop app and remote clients.
+app.use((_req, res, next) => {
+    res.setHeader('X-Server-Time', new Date().toISOString());
+    next();
+});
+app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error', 'X-Server-Time', 'Date'] }));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -138,7 +156,8 @@ app.get('/health', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString(),
         installMode,
-        version: RUNNING_VERSION
+        version: RUNNING_VERSION,
+        updateCheckDisabled
     });
 });
 
@@ -150,6 +169,9 @@ app.use('/api/auth', authRoutes);
 
 // File Tree API Routes (protected)
 app.use('/api/file-tree', authenticateToken, fileTreeRoutes);
+
+// Native file download (scoped 60s capability token in the URL, not a session)
+app.use('/api/download', authenticateDownloadToken, fileDownloadRoutes);
 
 // Projects API Routes (protected)
 app.use('/api/projects', authenticateToken, projectModuleRoutes);
@@ -357,6 +379,9 @@ async function startServer() {
             console.log('');
             console.log(`${terminalTextStyles.info('[INFO]')} Server URL:  ${terminalTextStyles.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
+            if (updateCheckOptOutVariable) {
+                console.log(`${terminalTextStyles.info('[INFO]')} Automatic update checks disabled (${terminalTextStyles.dim(updateCheckOptOutVariable)})`);
+            }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
 
