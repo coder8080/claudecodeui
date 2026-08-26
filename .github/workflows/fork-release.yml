@@ -1,0 +1,54 @@
+name: Fork release
+
+# Собирает форк и кладёт готовый .tgz в GitHub Release, откуда его ставит
+# ansible (roles/agent/tasks/user.yml). Установка напрямую из git невозможна:
+# dist/ и dist-server/ в .gitignore, а prepare — это husky, не сборка.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 26
+
+      - run: npm ci
+
+      - name: Compute version
+        id: version
+        run: |
+          BASE=$(node -p "require('./package.json').version")
+          # ${BASE%%-*} срезает уже существующий prerelease, чтобы суффиксы не наслаивались.
+          # Голый хеш невалиден как semver (числовой идентификатор с ведущим нулём) — отсюда g.
+          VERSION="${BASE%%-*}-g$(git rev-parse --short=7 HEAD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Без коммита: package.json в git остаётся с апстрим-версией, мержи не конфликтуют.
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      # Явно: prepublishOnly при npm pack не срабатывает.
+      - run: npm run build
+
+      - name: Pack
+        run: |
+          FILE=$(npm pack --json | jq -r '.[0].filename')
+          mv "$FILE" cloudcli.tgz
+
+      - name: Assert bin target is in the tarball
+        run: tar tzf cloudcli.tgz | grep -q '^package/dist-server/server/modules/cli/cli\.js$'
+
+      - name: Release
+        run: gh release create "v${{ steps.version.outputs.version }}" cloudcli.tgz
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
