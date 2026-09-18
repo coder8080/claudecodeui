@@ -5,10 +5,14 @@ import type { ServerEvent } from '../../../contexts/WebSocketContext';
 import { showCompletionTitleIndicator } from '../../../utils/pageTitleNotification';
 import { serverNowIso } from '../../../utils/serverClock';
 import { playChatCompletionSound, playNotificationSound } from '../../../utils/notificationSound';
+import { voicePlayer } from '../../../lib/voicePlayer';
+import { pickAutoSpeakText } from '../utils/voiceAutoSpeak';
 import type { MarkSessionIdle, MarkSessionProcessing } from '../../../hooks/useSessionProtection';
 import type { PendingPermissionRequest } from '../types/types';
 import type { ProjectSession, LLMProvider } from '../../../types/app';
 import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
+
+import { useVoiceAutoSpeak } from './useVoiceAvailable';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -85,6 +89,11 @@ export function useChatRealtimeHandlers({
   activeViewSessionIdRef.current = selectedSession?.id || currentSessionId || null;
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
+
+  // Read through a ref: the websocket listener is bound once per session, so a
+  // preference toggled mid-conversation has to reach the already-bound handler.
+  const autoSpeakRef = useRef(false);
+  autoSpeakRef.current = useVoiceAutoSpeak();
 
   // Keep the latest pending-permission snapshot available to the websocket
   // listener so back-to-back permission events can dedupe and re-arm the
@@ -259,6 +268,15 @@ export function useChatRealtimeHandlers({
           if (msg.success !== false) {
             showCompletionTitleIndicator();
             void playChatCompletionSound();
+
+            // Auto read-aloud: speak the turn the user just watched arrive. Only
+            // for the conversation on screen — a background session finishing
+            // must not start talking over the visible one. `finalizeStreaming`
+            // above has already landed the text in the store.
+            if (autoSpeakRef.current && sid && sid === activeViewSessionId) {
+              const text = pickAutoSpeakText(sessionStore.getMessages(sid));
+              if (text) voicePlayer.speak(text);
+            }
           }
 
           // The session id is stable for the whole conversation (allocated

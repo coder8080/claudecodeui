@@ -37,6 +37,20 @@ export default function VoiceSettingsTab() {
             ariaLabel={t('voiceSettings.enable')}
           />
         </div>
+
+        {voiceEnabled && (
+          <div className="mt-3 flex items-center justify-between rounded-lg border border-border p-3">
+            <div className="pr-3">
+              <div className="text-sm font-medium text-foreground">{t('voiceSettings.autoSpeak')}</div>
+              <div className="text-xs text-muted-foreground">{t('voiceSettings.autoSpeakDescription')}</div>
+            </div>
+            <SettingsToggle
+              checked={preferences.voiceAutoSpeak}
+              onChange={(v) => setPreference('voiceAutoSpeak', v)}
+              ariaLabel={t('voiceSettings.autoSpeak')}
+            />
+          </div>
+        )}
       </SettingsSection>
 
       {voiceEnabled && (

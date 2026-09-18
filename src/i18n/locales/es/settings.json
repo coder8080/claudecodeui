@@ -55,6 +55,8 @@
     "description": "Entrada de voz a texto y lectura en voz alta, mediante un backend de audio compatible con OpenAI.",
     "enable": "Activar voz",
     "enableDescription": "Muestra el botón del micrófono y el botón de lectura en voz alta en los mensajes.",
+    "autoSpeak": "Leer las respuestas en voz alta automáticamente",
+    "autoSpeakDescription": "Reproduce cada respuesta del asistente en cuanto termina.",
     "backendTitle": "Backend",
     "backendDescription": "Apunta a OpenAI, Groq o un servidor local (LocalAI, Speaches, Kokoro-FastAPI). Déjalo en blanco para usar el valor por defecto del servidor.",
     "baseUrl": "URL base",

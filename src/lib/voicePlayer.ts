@@ -89,6 +89,14 @@ class VoicePlayer {
     void this.play(id, content);
   }
 
+  // Auto read-aloud entry point: speaks unless this exact content is already the
+  // current one, so a re-render or a duplicate completion event can't restart it.
+  speak(content: string) {
+    const id = voiceId(content);
+    if (this.currentId === id && (this.state === 'playing' || this.state === 'loading')) return;
+    void this.play(id, content);
+  }
+
   stop() {
     this.token++; // ignore any stale in-flight result
     this.abortActive(); // and actually cancel the network request

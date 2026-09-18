@@ -55,6 +55,8 @@
     "description": "通过兼容 OpenAI 的音频后端实现语音转文字输入和朗读功能。",
     "enable": "启用语音",
     "enableDescription": "在消息上显示麦克风按钮和朗读按钮。",
+    "autoSpeak": "自动朗读回复",
+    "autoSpeakDescription": "助手的每条回复完成后立即朗读。",
     "backendTitle": "后端",
     "backendDescription": "指向 OpenAI、Groq 或本地服务器（LocalAI、Speaches、Kokoro-FastAPI）。留空以使用服务器默认值。",
     "baseUrl": "基础 URL",

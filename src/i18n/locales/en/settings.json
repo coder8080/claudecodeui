@@ -55,6 +55,8 @@
     "description": "Speech-to-text input and read-aloud, via an OpenAI-compatible audio backend.",
     "enable": "Enable voice",
     "enableDescription": "Show the mic button and the read-aloud button on messages.",
+    "autoSpeak": "Read answers aloud automatically",
+    "autoSpeakDescription": "Speak each assistant answer as soon as it is finished.",
     "backendTitle": "Backend",
     "backendDescription": "Point at OpenAI, Groq, or a local server (LocalAI, Speaches, Kokoro-FastAPI). Leave blank to use the server default.",
     "baseUrl": "Base URL",

@@ -12,6 +12,7 @@ import type {
 import { useDropzone } from 'react-dropzone';
 
 import { authenticatedFetch } from '../../../utils/api';
+import { voicePlayer } from '../../../lib/voicePlayer';
 import type { MarkSessionProcessing, SessionActivityMap } from '../../../hooks/useSessionProtection';
 import { grantClaudeToolPermission } from '../utils/chatPermissions';
 import {
@@ -671,6 +672,11 @@ export function useChatComposerState({
       queuedSubmission?: QueuedDraft,
     ) => {
       event.preventDefault();
+      // Browsers only grant audio playback to an element primed inside a user
+      // gesture. Sending is that gesture: priming here is what lets auto
+      // read-aloud speak the answer later, with no click of its own. Idempotent,
+      // and harmless on the non-gesture submit paths (queue flush, transcript).
+      voicePlayer.unlock();
       const currentInput = queuedSubmission?.content ?? inputValueRef.current;
       const currentAttachments = queuedSubmission?.attachments ?? attachedFiles;
       const previouslyUploadedAttachments = queuedSubmission?.uploadedAttachments ?? [];

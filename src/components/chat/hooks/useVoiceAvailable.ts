@@ -24,15 +24,19 @@ function checkVoiceHealth(): Promise<boolean> {
   return request;
 }
 
-function readVoiceEnabled(): boolean {
+function readPreference(key: 'voiceEnabled' | 'voiceAutoSpeak'): boolean {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return false;
     const parsed = JSON.parse(raw);
-    return parsed?.voiceEnabled === true || parsed?.voiceEnabled === 'true';
+    return parsed?.[key] === true || parsed?.[key] === 'true';
   } catch {
     return false;
   }
+}
+
+function readVoiceEnabled(): boolean {
+  return readPreference('voiceEnabled');
 }
 
 export function useVoiceAvailable(): boolean {
@@ -82,4 +86,28 @@ export function useVoiceAvailable(): boolean {
   }, [enabled]);
 
   return enabled && available;
+}
+
+/**
+ * Auto read-aloud rides on the same gate as the manual button (voice on and a
+ * backend that answers), plus its own `voiceAutoSpeak` preference.
+ */
+export function useVoiceAutoSpeak(): boolean {
+  const available = useVoiceAvailable();
+  const [autoSpeak, setAutoSpeak] = useState<boolean>(() =>
+    typeof window === 'undefined' ? false : readPreference('voiceAutoSpeak'),
+  );
+
+  useEffect(() => {
+    const update = () => setAutoSpeak(readPreference('voiceAutoSpeak'));
+    update();
+    window.addEventListener('storage', update);
+    window.addEventListener(SYNC_EVENT, update as EventListener);
+    return () => {
+      window.removeEventListener('storage', update);
+      window.removeEventListener(SYNC_EVENT, update as EventListener);
+    };
+  }, []);
+
+  return available && autoSpeak;
 }
