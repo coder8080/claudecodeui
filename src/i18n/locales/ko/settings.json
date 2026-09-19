@@ -57,6 +57,8 @@
     "enableDescription": "메시지에 마이크 버튼과 소리 내어 읽기 버튼을 표시합니다.",
     "autoSpeak": "답변 자동 읽어주기",
     "autoSpeakDescription": "어시스턴트의 답변이 완료될 때마다 소리로 읽어줍니다.",
+    "autoSpeakBlocked": "이 서버에서는 꺼져 있습니다. 자동 읽어주기는 모든 답변을 음성 백엔드로 계속 전송합니다.",
+    "autoSpeakHost": "답변은 {{host}}에서 합성됩니다. 각 답변의 텍스트가 그곳으로 전송됩니다.",
     "backendTitle": "백엔드",
     "backendDescription": "OpenAI, Groq 또는 로컬 서버(LocalAI, Speaches, Kokoro-FastAPI)를 지정하세요. 비워두면 서버 기본값을 사용합니다.",
     "baseUrl": "기본 URL",

@@ -57,6 +57,8 @@
     "enableDescription": "Muestra el botón del micrófono y el botón de lectura en voz alta en los mensajes.",
     "autoSpeak": "Leer las respuestas en voz alta automáticamente",
     "autoSpeakDescription": "Reproduce cada respuesta del asistente en cuanto termina.",
+    "autoSpeakBlocked": "Desactivado en este servidor: la lectura automática enviaría cada respuesta al backend de voz.",
+    "autoSpeakHost": "Las respuestas se sintetizan en {{host}}: el texto de cada respuesta se envía allí.",
     "backendTitle": "Backend",
     "backendDescription": "Apunta a OpenAI, Groq o un servidor local (LocalAI, Speaches, Kokoro-FastAPI). Déjalo en blanco para usar el valor por defecto del servidor.",
     "baseUrl": "URL base",

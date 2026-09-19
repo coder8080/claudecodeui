@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import type { NormalizedMessage } from '../../../stores/useSessionStore';
 
-import { pickAutoSpeakText } from './voiceAutoSpeak';
+import { pickAutoSpeakText, speakableText } from './voiceAutoSpeak';
 
 const message = (overrides: Partial<NormalizedMessage>): NormalizedMessage => ({
   id: 'text_1',
@@ -56,4 +56,59 @@ test('pickAutoSpeakText returns null when the last assistant turn is blank', () 
 test('pickAutoSpeakText tolerates missing input', () => {
   assert.equal(pickAutoSpeakText(null), null);
   assert.equal(pickAutoSpeakText([]), null);
+});
+
+test('speakableText drops fenced code but keeps the prose around it', () => {
+  const answer = [
+    'Here is the fix.',
+    '',
+    '```ts',
+    'const secret = readToken();',
+    '```',
+    '',
+    'Run it once.',
+  ].join('\n');
+
+  assert.equal(speakableText(answer), 'Here is the fix.\nRun it once.');
+});
+
+test('speakableText keeps inline code words and link labels, drops targets', () => {
+  assert.equal(
+    speakableText('Open the [dashboard](https://internal.example/reports?token=abc) and check `usage`.'),
+    'Open the dashboard and check usage.',
+  );
+});
+
+test('speakableText removes bare urls of any scheme', () => {
+  assert.equal(
+    speakableText('Logs live at https://logs.example/a?b=c and postgres://user:pw@db/app is the source.'),
+    'Logs live at and is the source.',
+  );
+});
+
+test('speakableText strips markdown markers that should not be pronounced', () => {
+  const answer = '## Result\n\n- **first** item\n- second item\n\n> quoted line';
+
+  assert.equal(speakableText(answer), 'Result\nfirst item\nsecond item\nquoted line');
+});
+
+test('speakableText caps a long answer at a sentence boundary', () => {
+  const sentence = 'This sentence is exactly the padding this test needs. ';
+  const spoken = speakableText(sentence.repeat(40));
+
+  assert.ok(spoken.length <= 1200, `expected a capped turn, got ${spoken.length}`);
+  assert.ok(spoken.endsWith('needs.'), `expected a whole sentence, got …${spoken.slice(-40)}`);
+});
+
+test('speakableText returns nothing for an answer that was only code', () => {
+  assert.equal(speakableText('```\nnpm run build\n```'), '');
+});
+
+test('pickAutoSpeakText skips an answer that leaves nothing to say', () => {
+  const messages = [
+    message({ id: 'text_1', content: 'earlier answer' }),
+    message({ id: 'text_2', content: '```\nnpm run build\n```' }),
+  ];
+
+  assert.equal(pickAutoSpeakText(messages), null);
 });

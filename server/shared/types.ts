@@ -1135,6 +1135,22 @@ export type VoiceSpeechPayload = {
 };
 
 /**
+ * Voice capability report served to the client.
+ *
+ * `configured` only says a backend exists. `autoSpeak` is the operator's
+ * separate permission for automatic read-aloud: that mode keeps sending every
+ * finished answer to the backend for as long as it is on, so whether an instance
+ * may do it at all is a deployment decision, not the viewer's. `backendHost`
+ * names the host that receives the text so the UI can say where synthesis
+ * happens; it is null when no server-side backend is configured.
+ */
+export type VoiceHealth = {
+  configured: boolean;
+  autoSpeak: boolean;
+  backendHost: string | null;
+};
+
+/**
  * Explicit service result used by Voice routes instead of transport-aware
  * exceptions.
  *
@@ -1154,7 +1170,7 @@ export type VoiceServiceResult<TValue> =
  * contract with handwritten fetch fakes and never patch global state.
  */
 export type VoiceService = {
-  getHealth(): { configured: boolean };
+  getHealth(): VoiceHealth;
   transcribe(input: {
     audio: VoiceAudioUpload;
     overrides: VoiceRequestOverrides;

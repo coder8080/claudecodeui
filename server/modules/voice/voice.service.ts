@@ -14,6 +14,10 @@ type VoiceServiceDependencies = {
     ttsModel: string;
     ttsVoice: string;
   };
+  // Whether this deployment permits automatic read-aloud. Held next to the
+  // backend config because it is the same kind of decision: where answers are
+  // allowed to travel, set by whoever runs the instance.
+  autoSpeakAllowed: boolean;
   timeoutMs: number;
   fetchBackend(url: string, options: RequestInit): Promise<Response>;
 };
@@ -49,6 +53,15 @@ function validateBackendBaseUrl(baseUrl: string): boolean {
       && !parsedUrl.hostname.startsWith('169.254.');
   } catch {
     return false;
+  }
+}
+
+function backendHostname(baseUrl: string): string | null {
+  if (!baseUrl) return null;
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return null;
   }
 }
 
@@ -115,7 +128,11 @@ function createTranscriptionFormData(audio: VoiceAudioUpload, sttModel: string):
  */
 export function createVoiceService(dependencies: VoiceServiceDependencies): VoiceService {
   return {
-    getHealth: () => ({ configured: Boolean(dependencies.defaults.baseUrl) }),
+    getHealth: () => ({
+      configured: Boolean(dependencies.defaults.baseUrl),
+      autoSpeak: dependencies.autoSpeakAllowed,
+      backendHost: backendHostname(dependencies.defaults.baseUrl),
+    }),
 
     async transcribe(input) {
       const config = resolveVoiceConfig(dependencies.defaults, input.overrides);

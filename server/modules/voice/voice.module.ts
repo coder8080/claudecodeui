@@ -9,6 +9,14 @@ const voiceTimeoutMs = Number.isFinite(parsedTimeoutMs) && parsedTimeoutMs > 0
   ? parsedTimeoutMs
   : DEFAULT_VOICE_TIMEOUT_MS;
 
+// Automatic read-aloud stays off unless the deployment opts in. The manual
+// button speaks what someone asked for; automatic mode keeps every finished
+// answer flowing to the voice backend for as long as it is on, so on a shared or
+// customer-facing instance that is the operator's call, not the viewer's.
+const autoSpeakAllowed = ['on', 'true', '1', 'yes'].includes(
+  (process.env.VOICE_AUTO_SPEAK || '').trim().toLowerCase(),
+);
+
 const voiceService = createVoiceService({
   defaults: {
     // The server-controlled URL is intentional: frontend-configured custom
@@ -19,6 +27,7 @@ const voiceService = createVoiceService({
     ttsModel: process.env.VOICE_TTS_MODEL || 'tts-1',
     ttsVoice: process.env.VOICE_TTS_VOICE || 'alloy',
   },
+  autoSpeakAllowed,
   timeoutMs: voiceTimeoutMs,
   fetchBackend: async (url, options) => {
     const abortController = new AbortController();

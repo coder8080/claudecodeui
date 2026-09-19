@@ -57,6 +57,8 @@
     "enableDescription": "在消息上显示麦克风按钮和朗读按钮。",
     "autoSpeak": "自动朗读回复",
     "autoSpeakDescription": "助手的每条回复完成后立即朗读。",
+    "autoSpeakBlocked": "此服务器已关闭：自动朗读会将每条回答持续发送到语音后端。",
+    "autoSpeakHost": "回答在 {{host}} 合成——每条回答的文本都会发送到那里。",
     "backendTitle": "后端",
     "backendDescription": "指向 OpenAI、Groq 或本地服务器（LocalAI、Speaches、Kokoro-FastAPI）。留空以使用服务器默认值。",
     "baseUrl": "基础 URL",

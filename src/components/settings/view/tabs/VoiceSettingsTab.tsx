@@ -4,9 +4,20 @@ import SettingsSection from '../SettingsSection';
 import SettingsToggle from '../SettingsToggle';
 import { useUiPreferences } from '../../../../hooks/useUiPreferences';
 import { useVoiceConfig } from '../../../../hooks/useVoiceConfig';
+import { useVoiceHealth } from '../../../chat/hooks/useVoiceAvailable';
 
 const inputClass =
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+
+function hostOf(baseUrl: string): string | null {
+  const trimmed = baseUrl.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).host;
+  } catch {
+    return null;
+  }
+}
 
 function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
@@ -21,7 +32,13 @@ export default function VoiceSettingsTab() {
   const { t } = useTranslation('settings');
   const { preferences, setPreference } = useUiPreferences();
   const { config, update } = useVoiceConfig();
+  const health = useVoiceHealth();
   const voiceEnabled = preferences.voiceEnabled;
+  // Automatic read-aloud is the operator's call; the toggle only reflects it.
+  const autoSpeakAllowed = health?.autoSpeak === true;
+  // Name the host that will receive the answers. A base URL set here wins,
+  // because then the browser calls that backend itself.
+  const speechHost = hostOf(config.baseUrl) ?? health?.backendHost ?? null;
 
   return (
     <div className="space-y-8">
@@ -42,12 +59,20 @@ export default function VoiceSettingsTab() {
           <div className="mt-3 flex items-center justify-between rounded-lg border border-border p-3">
             <div className="pr-3">
               <div className="text-sm font-medium text-foreground">{t('voiceSettings.autoSpeak')}</div>
-              <div className="text-xs text-muted-foreground">{t('voiceSettings.autoSpeakDescription')}</div>
+              <div className="text-xs text-muted-foreground">
+                {autoSpeakAllowed ? t('voiceSettings.autoSpeakDescription') : t('voiceSettings.autoSpeakBlocked')}
+              </div>
+              {autoSpeakAllowed && speechHost && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {t('voiceSettings.autoSpeakHost', { host: speechHost })}
+                </div>
+              )}
             </div>
             <SettingsToggle
-              checked={preferences.voiceAutoSpeak}
+              checked={autoSpeakAllowed && preferences.voiceAutoSpeak}
               onChange={(v) => setPreference('voiceAutoSpeak', v)}
               ariaLabel={t('voiceSettings.autoSpeak')}
+              disabled={!autoSpeakAllowed}
             />
           </div>
         )}

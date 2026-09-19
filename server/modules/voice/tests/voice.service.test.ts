@@ -14,13 +14,31 @@ const defaults = {
 test('reports whether the server-controlled backend is configured', () => {
   const service = createVoiceService({
     defaults: { ...defaults, baseUrl: '' },
+    autoSpeakAllowed: false,
     timeoutMs: 1_000,
     fetchBackend: async () => {
       throw new Error('fetch should not run');
     },
   });
 
-  assert.deepEqual(service.getHealth(), { configured: false });
+  assert.deepEqual(service.getHealth(), { configured: false, autoSpeak: false, backendHost: null });
+});
+
+test('reports the auto read-aloud permission and the host that receives the text', () => {
+  const service = createVoiceService({
+    defaults,
+    autoSpeakAllowed: true,
+    timeoutMs: 1_000,
+    fetchBackend: async () => {
+      throw new Error('fetch should not run');
+    },
+  });
+
+  assert.deepEqual(service.getHealth(), {
+    configured: true,
+    autoSpeak: true,
+    backendHost: 'voice.example',
+  });
 });
 
 test('transcribes with injected fetch and request-level credential/model overrides', async () => {
@@ -28,6 +46,7 @@ test('transcribes with injected fetch and request-level credential/model overrid
   let requestedOptions: RequestInit | undefined;
   const service = createVoiceService({
     defaults,
+    autoSpeakAllowed: false,
     timeoutMs: 1_000,
     fetchBackend: async (url, options) => {
       requestedUrl = url;
@@ -55,6 +74,7 @@ test('forwards the explicit TTS format and maps backend authentication failures'
   let requestBody = '';
   const service = createVoiceService({
     defaults,
+    autoSpeakAllowed: false,
     timeoutMs: 1_000,
     fetchBackend: async (_url, options) => {
       requestBody = String(options.body);
@@ -84,6 +104,7 @@ test('blocks link-local metadata destinations before calling the fetch adapter',
   let fetchCalls = 0;
   const service = createVoiceService({
     defaults: { ...defaults, baseUrl: 'http://169.254.169.254/latest' },
+    autoSpeakAllowed: false,
     timeoutMs: 1_000,
     fetchBackend: async () => {
       fetchCalls += 1;

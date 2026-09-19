@@ -57,6 +57,8 @@
     "enableDescription": "Show the mic button and the read-aloud button on messages.",
     "autoSpeak": "Read answers aloud automatically",
     "autoSpeakDescription": "Speak each assistant answer as soon as it is finished.",
+    "autoSpeakBlocked": "Turned off on this server: automatic read-aloud would keep sending every answer to the voice backend.",
+    "autoSpeakHost": "Answers are synthesized at {{host}} — the text of each answer is sent there.",
     "backendTitle": "Backend",
     "backendDescription": "Point at OpenAI, Groq, or a local server (LocalAI, Speaches, Kokoro-FastAPI). Leave blank to use the server default.",
     "baseUrl": "Base URL",
