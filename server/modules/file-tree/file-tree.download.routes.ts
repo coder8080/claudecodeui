@@ -2,10 +2,8 @@ import express from 'express';
 import type { Request } from 'express';
 
 import { createRouteHandler } from '@/modules/file-tree/file-tree.routes.js';
-import type { FileTreeLogger, FileTreeServices } from '@/shared/types.js';
+import type { DownloadClaim, FileTreeLogger, FileTreeServices } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
-
-type DownloadClaim = { projectId: string; path: string };
 
 function readDownloadClaim(request: Request): DownloadClaim {
   const claim = (request as Request & { downloadClaim?: DownloadClaim }).downloadClaim;
@@ -42,10 +40,26 @@ export function createFileDownloadRouter(
     // them (.env, .gitignore, .nvmrc), and the path is already confined to the
     // project root, so serve them exactly like the inline content route does.
     response.download(target.path, target.name, { dotfiles: 'allow' }, (error) => {
-      if (error && !response.headersSent) {
+      if (!error) return;
+
+      if (!response.headersSent) {
         logger.error('Error sending File Tree download', error);
         response.status(500).json({ error: 'Error reading file' });
+        return;
       }
+
+      // The client hung up on its own — cancelling a download or closing the
+      // tab is a normal outcome for this route, not a server failure, and the
+      // response is already gone, so there is nothing to log or to send.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (request.destroyed || code === 'ECONNABORTED' || code === 'EPIPE') return;
+
+      // A genuine read failure mid-transfer: the headers, including
+      // Content-Length, are already on the wire, so the only honest signal left
+      // is to break the connection. The browser then marks the download failed
+      // instead of saving a silently truncated file.
+      logger.error('File Tree download failed after headers were sent', error);
+      response.destroy();
     });
   }, logger));
 

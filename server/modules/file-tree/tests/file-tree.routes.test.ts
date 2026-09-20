@@ -11,7 +11,7 @@ import express, { type RequestHandler } from 'express';
 
 import { createFileDownloadRouter } from '@/modules/file-tree/file-tree.download.routes.js';
 import { createFileTreeRouter } from '@/modules/file-tree/file-tree.routes.js';
-import type { FileTreeServices } from '@/shared/types.js';
+import type { DownloadClaim, FileTreeServices } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
 function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTreeServices {
@@ -79,12 +79,12 @@ async function withFileTreeServer(
  */
 async function withDownloadServer(
   services: FileTreeServices,
-  claim: { projectId: string; path: string },
+  claim: DownloadClaim,
   run: (baseUrl: string) => Promise<void>,
 ): Promise<void> {
   await withServer((app) => {
     app.use('/api/download', (request, _response, next) => {
-      (request as express.Request & { downloadClaim?: typeof claim }).downloadClaim = claim;
+      (request as express.Request & { downloadClaim?: DownloadClaim }).downloadClaim = claim;
       next();
     }, createFileDownloadRouter(services, { error: () => undefined }));
   }, run);
@@ -325,6 +325,109 @@ test('download route serves a dotfile instead of treating it as hidden', async (
   }
 });
 
+/**
+ * Mounts the download router with `res.download` replaced by a stub that sends
+ * the head plus a first chunk and then reports a failure. The transfer itself
+ * is Express's job; the branch that runs once it breaks after the headers are
+ * already on the wire is ours, and a real mid-stream read failure cannot be
+ * produced reliably from a test.
+ */
+async function withFailingTransferServer(
+  failure: NodeJS.ErrnoException,
+  errors: string[],
+  run: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const services = createFakeServices({
+    resolveDownloadTarget: async () => ({ path: '/unused/partial.bin', name: 'partial.bin', size: 7 }),
+  });
+
+  await withServer((app) => {
+    app.use('/api/download', (request, response, next) => {
+      (request as express.Request & { downloadClaim?: DownloadClaim })
+        .downloadClaim = { projectId: 'project-1', path: 'partial.bin' };
+
+      response.download = ((
+        _path: string,
+        _name: string,
+        _options: unknown,
+        callback: (error?: NodeJS.ErrnoException) => void,
+      ) => {
+        response.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+        response.write('partial');
+        callback(failure);
+        // Only reached when the route left the response alive.
+        if (!response.destroyed) response.end();
+        return response;
+      }) as unknown as typeof response.download;
+
+      next();
+    }, createFileDownloadRouter(services, { error: (message) => { errors.push(message); } }));
+  }, run);
+}
+
+test('download route answers 500 when the transfer fails before any header is sent', async () => {
+  const errors: string[] = [];
+  const services = createFakeServices({
+    // The ticket was valid when it was issued; the file is gone by the time the
+    // browser follows it, so `send` fails with ENOENT before writing a head.
+    resolveDownloadTarget: async () => ({
+      path: path.join(os.tmpdir(), 'file-tree-missing', 'gone.bin'),
+      name: 'gone.bin',
+      size: 4,
+    }),
+  });
+
+  await withServer((app) => {
+    app.use('/api/download', (request, _response, next) => {
+      (request as express.Request & { downloadClaim?: DownloadClaim })
+        .downloadClaim = { projectId: 'project-1', path: 'gone.bin' };
+      next();
+    }, createFileDownloadRouter(services, { error: (message) => { errors.push(message); } }));
+  }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/download/file?t=stub`);
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: 'Error reading file' });
+  });
+
+  assert.deepEqual(errors, ['Error sending File Tree download']);
+});
+
+test('download route breaks the connection when the transfer fails after the headers', async () => {
+  const errors: string[] = [];
+  const failure: NodeJS.ErrnoException = Object.assign(new Error('read failed'), { code: 'EIO' });
+
+  await withFailingTransferServer(failure, errors, async (baseUrl) => {
+    // Content-Length is already promised, so a truncated body the client
+    // accepts would be a silently corrupt file. The aborted connection is what
+    // makes the browser mark the download failed instead of saving it.
+    await assert.rejects(async () => {
+      const response = await fetch(`${baseUrl}/api/download/file?t=stub`);
+      await response.text();
+    });
+  });
+
+  assert.deepEqual(errors, ['File Tree download failed after headers were sent']);
+});
+
+test('download route stays silent when the client cancels the download', async () => {
+  const errors: string[] = [];
+  // What Express reports when the browser's own cancel button hangs up.
+  const abort: NodeJS.ErrnoException = Object.assign(new Error('aborted'), { code: 'ECONNABORTED' });
+
+  await withFailingTransferServer(abort, errors, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/download/file?t=stub`);
+
+    assert.equal(response.status, 200);
+    // The route left the response alone, so the stub could close it normally.
+    assert.equal(await response.text(), 'partial');
+  });
+
+  // Cancelling a download is the headline feature of this route, not a fault:
+  // it must not fill the server log with errors.
+  assert.deepEqual(errors, []);
+});
+
 test('inline content route never sends Content-Disposition', async () => {
   const services = createFakeServices({
     openFile: async () => ({
@@ -339,8 +442,10 @@ test('inline content route never sends Content-Disposition', async () => {
     );
 
     assert.equal(response.status, 200);
-    // Images and media previews render inline; an attachment header here would
-    // turn every image in the app into a download.
+    // Pins the split this change is built on: `/files/content` stays the inline
+    // route and downloading lives on its own endpoint. It catches an
+    // `res.download` wired to the wrong route, which would attach a
+    // Content-Disposition to every preview response the app serves.
     assert.equal(response.headers.get('content-disposition'), null);
     assert.equal(response.headers.get('content-type'), 'image/png');
   });

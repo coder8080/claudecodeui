@@ -43,6 +43,11 @@ import {
 } from './modules/plugins/index.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import { voiceRoutes } from './modules/voice/index.js';
+import {
+    closeScheduledMessageDispatcher,
+    initializeScheduledMessageDispatcher,
+    scheduledMessagesRoutes,
+} from './modules/scheduled-messages/index.js';
 import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import { fileDownloadRoutes, fileTreeRoutes } from './modules/file-tree/index.js';
@@ -102,7 +107,7 @@ const agentRoutes = createAgentModule({
 });
 
 // Single WebSocket server that handles chat, shell, and plugin proxy paths.
-const wss = createWebSocketServer(server, {
+createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
         authenticateWebSocket,
@@ -123,20 +128,7 @@ const wss = createWebSocketServer(server, {
     getPluginPort,
 });
 
-// Make WebSocket server available to routes
-app.locals.wss = wss;
-
-// Chat interleaves browser-stamped optimistic rows with transcript rows the
-// provider CLI stamped with THIS machine's clock, so the client measures the
-// offset between the two. `Date` alone is not enough: nginx hides the upstream
-// `Date` and substitutes its own, so an app-owned header carries the clock that
-// actually writes the transcripts. Neither is CORS-safelisted, so both are
-// exposed for the desktop app and remote clients.
-app.use((_req, res, next) => {
-    res.setHeader('X-Server-Time', new Date().toISOString());
-    next();
-});
-app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error', 'X-Server-Time', 'Date'] }));
+app.use(cors({ exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'] }));
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -212,6 +204,7 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
+app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
 
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
@@ -387,6 +380,9 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();
+            // Sends anything that came due while the server was not running,
+            // then keeps polling.
+            initializeScheduledMessageDispatcher(providerRuntimeService);
 
             // Start server-side plugin processes for enabled plugins
             startEnabledPluginServers().catch(err => {
@@ -395,6 +391,7 @@ async function startServer() {
         });
 
         await closeSessionsWatcher();
+        closeScheduledMessageDispatcher();
         // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
             try {
