@@ -515,7 +515,7 @@
     },
     "managed": {
       "badge": "Spravováno",
-      "hint": "Spravuje CloudCLI."
+      "hint": "Spravuje Svod."
     },
     "help": {
       "title": "O MCP pro Codex",
@@ -578,7 +578,7 @@
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "neoficiální",
-      "description": "Analýza relací Claude Code přímo v CloudCLI. Zjistěte, proč vaše relace spalují tokeny, aniž byste opustili prohlížeč.",
+      "description": "Analýza relací Claude Code přímo v aplikaci Svod. Zjistěte, proč vaše relace spalují tokeny, aniž byste opustili prohlížeč.",
       "install": "Instalovat"
     },
     "sessionManagerPlugin": {

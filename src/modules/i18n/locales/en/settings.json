@@ -549,7 +549,7 @@
     },
     "managed": {
       "badge": "Managed",
-      "hint": "Managed by CloudCLI."
+      "hint": "Managed by Svod."
     },
     "help": {
       "title": "About Codex MCP",
@@ -612,7 +612,7 @@
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "unofficial",
-      "description": "Session intelligence for Claude Code, inside CloudCLI. See why your sessions are burning tokens without leaving the browser.",
+      "description": "Session intelligence for Claude Code, inside Svod. See why your sessions are burning tokens without leaving the browser.",
       "install": "Install"
     },
     "sessionManagerPlugin": {

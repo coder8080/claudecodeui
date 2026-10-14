@@ -535,7 +535,7 @@
     },
     "managed": {
       "badge": "מנוהל",
-      "hint": "מנוהל על ידי CloudCLI."
+      "hint": "מנוהל על ידי Svod."
     },
     "help": {
       "title": "על Codex MCP",
@@ -598,7 +598,7 @@
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "לא רשמי",
-      "description": "ניתוח סשנים של Claude Code בתוך CloudCLI. אפשר לראות למה הסשנים צורכים טוקנים בלי לצאת מהדפדפן.",
+      "description": "ניתוח סשנים של Claude Code בתוך Svod. אפשר לראות למה הסשנים צורכים טוקנים בלי לצאת מהדפדפן.",
       "install": "התקנה"
     },
     "sessionManagerPlugin": {

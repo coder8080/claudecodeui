@@ -519,7 +519,7 @@
     },
     "managed": {
       "badge": "Gestionado",
-      "hint": "Gestionado por CloudCLI."
+      "hint": "Gestionado por Svod."
     },
     "help": {
       "title": "Acerca de MCP en Codex",
@@ -582,7 +582,7 @@
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "no oficial",
-      "description": "Inteligencia de sesiones para Claude Code, dentro de CloudCLI. Descubre por qué tus sesiones queman tokens sin salir del navegador.",
+      "description": "Inteligencia de sesiones para Claude Code, dentro de Svod. Descubre por qué tus sesiones queman tokens sin salir del navegador.",
       "install": "Instalar"
     },
     "sessionManagerPlugin": {

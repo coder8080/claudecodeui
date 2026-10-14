@@ -536,7 +536,7 @@
     },
     "managed": {
       "badge": "Dikelola",
-      "hint": "Dikelola oleh CloudCLI."
+      "hint": "Dikelola oleh Svod."
     },
     "help": {
       "title": "Tentang MCP Codex",
@@ -599,7 +599,7 @@
     "prismCloudCLI": {
       "name": "PRISM CloudCLI",
       "badge": "tidak resmi",
-      "description": "Intelijen sesi untuk Claude Code di dalam CloudCLI. Lihat penyebab penggunaan token tinggi tanpa meninggalkan browser.",
+      "description": "Intelijen sesi untuk Claude Code di dalam Svod. Lihat penyebab penggunaan token tinggi tanpa meninggalkan browser.",
       "install": "Instal"
     },
     "sessionManagerPlugin": {

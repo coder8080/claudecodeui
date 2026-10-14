@@ -1,15 +1,12 @@
-import { Cloud, ExternalLink, MessageSquare, Star, Users } from 'lucide-react';
+import { ExternalLink, MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
-import { IS_PLATFORM } from '@/shared/utils';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
-import PremiumFeatureCard from '@/modules/settings/PremiumFeatureCard';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';
 const DOCS_URL = 'https://cloudcli.ai/docs/plugin-overview';
-const CLOUDCLI_URL = 'https://cloudcli.ai';
 
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -27,7 +24,7 @@ function DiscordIcon({ className }: { className?: string }) {
   );
 }
 
-/** Rendered by Settings for the "about" tab, showing version, links and premium upsell cards. */
+/** Rendered by Settings for the "about" tab, showing version, links and license. */
 export default function AboutTab() {
   const { t } = useTranslation('settings');
   const { updateAvailable, latestVersion, currentVersion, releaseInfo } = useVersionCheck('siteboon', 'claudecodeui');
@@ -46,7 +43,7 @@ export default function AboutTab() {
               className="text-base font-semibold text-foreground"
               style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
             >
-              CloudCLI
+              SVOD
             </span>
             <a
               href={releasesUrl}
@@ -73,18 +70,6 @@ export default function AboutTab() {
           </p>
         </div>
       </div>
-
-      {/* Star on GitHub button */}
-      <a
-        href={GITHUB_REPO_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background px-3.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-      >
-        <GitHubIcon className="h-4 w-4" />
-        <Star className="h-3.5 w-3.5" />
-        <span>{t('about.starOnGitHub')}</span>
-      </a>
 
       {/* Links */}
       <div className="flex flex-wrap gap-4 text-sm">
@@ -115,52 +100,7 @@ export default function AboutTab() {
           <ExternalLink className="h-3.5 w-3.5" />
           Docs
         </a>
-        <a
-          href={CLOUDCLI_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          cloudcli.ai
-        </a>
       </div>
-
-      {/* Hosted CTA (OSS mode only) */}
-      {!IS_PLATFORM && (
-        <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
-          <h4 className="text-sm font-medium text-foreground">{t('about.hostedTitle')}</h4>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t('about.hostedDescription')}
-          </p>
-          <a
-            href={CLOUDCLI_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors hover:underline"
-          >
-            {t('about.learnMore')}
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Premium feature placeholders (OSS mode only) */}
-      {!IS_PLATFORM && (
-        <div className="space-y-4 border-t border-border/50 pt-6">
-          <h3 className="text-sm font-medium text-foreground">{t('about.proFeaturesTitle')}</h3>
-          <PremiumFeatureCard
-            icon={<Cloud className="h-5 w-5" />}
-            title={t('about.syncSettingsTitle')}
-            description={t('about.syncSettingsDescription')}
-          />
-          <PremiumFeatureCard
-            icon={<Users className="h-5 w-5" />}
-            title={t('about.teamManagementTitle')}
-            description={t('about.teamManagementDescription')}
-          />
-        </div>
-      )}
 
       {/* License */}
       <div className="border-t border-border/50 pt-4">
