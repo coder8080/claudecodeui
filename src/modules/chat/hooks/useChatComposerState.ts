@@ -10,6 +10,7 @@ import type {
   TouchEvent,
 } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
@@ -26,6 +27,7 @@ import {
   writeQueuedMessage,
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
+import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
@@ -176,6 +178,7 @@ export function useChatComposerState({
   currentProviderModel,
   currentProviderEffort,
   isLoading,
+  processingSessions,
   canAbortSession,
   tokenBudget,
   sendMessage,
@@ -189,6 +192,7 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
 }: UseChatComposerStateArgs) {
+  const { t } = useTranslation('chat');
   // The composer text together with the chat scope it belongs to. They are one
   // state rather than a value plus a ref because they have to move in lockstep:
   // on a session switch there is one commit where the scope has already changed
@@ -651,7 +655,14 @@ export function useChatComposerState({
     selectedSession,
   ]);
 
-  const handleSubmit = useCallback(
+  // Read at send time through a ref: the map changes on every poll, and a
+  // submit handler rebuilt that often would re-render the whole composer.
+  const processingSessionsRef = useRef(processingSessions);
+  useEffect(() => {
+    processingSessionsRef.current = processingSessions;
+  }, [processingSessions]);
+
+  const submitMessage = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
       queuedSubmission?: QueuedDraft,
@@ -854,6 +865,24 @@ export function useChatComposerState({
         });
       }
 
+      // A new turn replaces the CLI process a session's background work runs
+      // under: the agents, workflows and commands it still has going are
+      // stopped, or finish where nothing is listening. Sending is the user's
+      // call, but not one to make for them.
+      const backgroundActivity = processingSessionsRef.current?.get(targetSessionId);
+      if (backgroundActivity?.background) {
+        const work = ownBackgroundTasks(backgroundActivity.tasks ?? [])
+          .map((task) => `• ${describeBackgroundTask(task, t)}`)
+          .join('\n');
+        const confirmed = window.confirm(t('claudeStatus.backgroundTask.sendAnyway', {
+          work,
+          defaultValue: 'This session still has background work running:\n{{work}}\n\nA new message starts a new turn, which stops that work; anything it has not reported yet is lost. Send anyway?',
+        }));
+        if (!confirmed) {
+          return;
+        }
+      }
+
       const attachmentRecords = uploadedAttachments as ChatAttachment[];
       const userMessage: ChatMessage = {
         type: 'user',
@@ -937,7 +966,36 @@ export function useChatComposerState({
       addMessage,
       setIsUserScrolledUp,
       slashCommands,
+      t,
     ],
+  );
+
+  // Chat scopes with a submit still awaiting its upload or, for a brand-new
+  // chat, its session id. The composer does not change until that returns (the
+  // text stays, send stays enabled), so on a slow server the user submits
+  // again — and each extra submit of a new chat allocated its own session and
+  // sent it the same first message.
+  const submittingScopesRef = useRef(new Set<string>());
+
+  const handleSubmit = useCallback(
+    async (
+      event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
+      queuedSubmission?: QueuedDraft,
+    ) => {
+      const scope = draftScopeRef.current ?? '';
+      if (submittingScopesRef.current.has(scope)) {
+        // Still cancel the event: an ignored form submit must not reload the page.
+        event.preventDefault();
+        return;
+      }
+      submittingScopesRef.current.add(scope);
+      try {
+        await submitMessage(event, queuedSubmission);
+      } finally {
+        submittingScopesRef.current.delete(scope);
+      }
+    },
+    [submitMessage],
   );
 
   useEffect(() => {
