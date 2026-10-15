@@ -196,6 +196,8 @@
   "providerSelection": {
     "title": "Vyberte AI asistenta",
     "description": "Vyberte provider a zahajte novou konverzaci",
+    "fixedTitle": "Začněte novou konverzaci",
+    "fixedDescription": "Napište zprávu níže a začněte",
     "selectModel": "Vyberte model",
     "providerInfo": {
       "anthropic": "od společnosti Anthropic",

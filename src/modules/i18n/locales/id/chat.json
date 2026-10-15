@@ -170,6 +170,8 @@
   "providerSelection": {
     "title": "Pilih Asisten AI",
     "description": "Pilih provider untuk memulai percakapan baru",
+    "fixedTitle": "Mulai percakapan baru",
+    "fixedDescription": "Ketik pesan Anda di bawah untuk memulai",
     "selectModel": "Pilih Model",
     "providerInfo": {
       "anthropic": "oleh Anthropic",

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
 import { writeSelectedProvider } from '@/shared/selectedProvider';
@@ -97,4 +97,43 @@ test('the panel releases its subscription when it unmounts', () => {
   stopCounting();
   assert.equal(withPanelMounted, 1, 'the counter itself must be notified once per write');
   assert.equal(liveSubscribers, 1, 'only the counter should remain; the panel leaked');
+});
+
+test('the panel follows an operator agent lock that lands after mount', async () => {
+  // CLOUDCLI_FIXED_AGENT reaches the browser over /health, after the panel has
+  // already rendered the stored choice; a generated commit message must still
+  // be attributed to the fixed agent. The lock store is a once-per-page
+  // singleton, so this case loads fresh copies of it — and of React and the
+  // testing library, which must share one React instance with the hook.
+  let answerHealth: (body: unknown) => void = () => {};
+  vi.stubGlobal('fetch', vi.fn((input: unknown) => {
+    if (String(input) !== '/health') {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }
+    return new Promise((resolve) => {
+      answerHealth = (body) => resolve({ ok: true, json: () => Promise.resolve(body) });
+    });
+  }));
+  vi.resetModules();
+  const testingLibrary = await import('@testing-library/react');
+  const { useSelectedProvider: useFreshSelectedProvider } = await import('@/shared/hooks/useSelectedProvider');
+  const freshSelected = await import('@/shared/selectedProvider');
+  const freshSettings = await import('@/shared/userSettings');
+  freshSettings.resetUserPreferences();
+  freshSettings.writeUserPreference('selectedProvider', 'cursor');
+
+  const loading = freshSelected.loadFixedProvider();
+  const { result } = testingLibrary.renderHook(() => useFreshSelectedProvider());
+  assert.equal(result.current, 'cursor');
+
+  await testingLibrary.act(async () => {
+    answerHealth({ fixedAgent: 'codex' });
+    await loading;
+  });
+
+  assert.equal(result.current, 'codex');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });

@@ -3,6 +3,7 @@ import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } f
 import type { TFunction } from 'i18next';
 
 import { LLMProviderLogo, ScrollArea } from '@/shared/ui';
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SidebarProjectListProps, SidebarSearchMode } from '@/shared/types';
 import { formatCompactAge, getAllSessions } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SidebarFooter from '@/modules/sidebar/SidebarFooter';
@@ -175,6 +176,8 @@ export default function SidebarContent({
   projectListProps,
   t,
 }: SidebarContentProps) {
+  // Provider icons are noise when the operator fixed the agent (CLOUDCLI_FIXED_AGENT).
+  const fixedProvider = useFixedProvider();
   const showConversationSearch = searchMode === 'conversations' && searchFilter.trim().length >= 2;
   const hasSearchResults = Boolean(
     conversationResults
@@ -261,9 +264,11 @@ export default function SidebarContent({
                           session.provider,
                         )}
                       >
-                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-muted/60">
-                          <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
-                        </span>
+                        {!fixedProvider && (
+                          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-muted/60">
+                            <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
+                          </span>
+                        )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-normal leading-4 text-foreground">
                             {session.sessionTitle}
@@ -565,9 +570,11 @@ export default function SidebarContent({
                               isProjectArchived: true,
                             })}
                           >
-                            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
-                              <LLMProviderLogo provider={session.__provider} className="h-3.5 w-3.5" />
-                            </span>
+                            {!fixedProvider && (
+                              <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
+                                <LLMProviderLogo provider={session.__provider} className="h-3.5 w-3.5" />
+                              </span>
+                            )}
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-xs text-foreground">
                                 {(typeof session.summary === 'string' && session.summary.trim().length > 0
@@ -635,9 +642,11 @@ export default function SidebarContent({
                           className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => onArchivedSessionClick(session)}
                         >
-                          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
-                            <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
-                          </span>
+                          {!fixedProvider && (
+                            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-background/70">
+                              <LLMProviderLogo provider={session.provider} className="h-3.5 w-3.5" />
+                            </span>
+                          )}
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs text-foreground">
                               {session.sessionTitle}

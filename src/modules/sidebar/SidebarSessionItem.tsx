@@ -5,6 +5,7 @@ import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn } from '@/shared/utils';
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
@@ -66,6 +67,8 @@ function SidebarSessionItem({
   t,
 }: SidebarSessionItemProps) {
   const isCompact = useCompactSidebar();
+  // Provider icons are noise when the operator fixed the agent (CLOUDCLI_FIXED_AGENT).
+  const fixedProvider = useFixedProvider();
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
   const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
@@ -190,14 +193,16 @@ function SidebarSessionItem({
         >
           <div className="flex items-center gap-2">
             {selectionIcon}
-            <div
-              className={cn(
-                'w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0',
-                isSelected ? 'bg-primary/10' : 'bg-muted/50',
-              )}
-            >
-              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
-            </div>
+            {!fixedProvider && (
+              <div
+                className={cn(
+                  'w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0',
+                  isSelected ? 'bg-primary/10' : 'bg-muted/50',
+                )}
+              >
+                <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
+              </div>
+            )}
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
@@ -256,9 +261,11 @@ function SidebarSessionItem({
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden="true" />
 
             <div className="mb-4 flex items-center gap-3 px-1">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
-                <LLMProviderLogo provider={session.__provider} className="h-5 w-5" />
-              </div>
+              {!fixedProvider && (
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
+                  <LLMProviderLogo provider={session.__provider} className="h-5 w-5" />
+                </div>
+              )}
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-foreground" title={sessionView.sessionName}>
                   {sessionView.sessionName}
@@ -415,14 +422,16 @@ function SidebarSessionItem({
         >
           <div className="flex w-full min-w-0 items-center gap-2">
             {selectionIcon}
-            <div
-              className={cn(
-                'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md',
-                isSelected ? 'bg-primary/10' : 'bg-muted/50',
-              )}
-            >
-              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
-            </div>
+            {!fixedProvider && (
+              <div
+                className={cn(
+                  'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md',
+                  isSelected ? 'bg-primary/10' : 'bg-muted/50',
+                )}
+              >
+                <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
+              </div>
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <div

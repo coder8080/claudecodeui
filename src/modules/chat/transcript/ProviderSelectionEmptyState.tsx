@@ -25,6 +25,7 @@ import {
 import ModelGroupList, { type ModelGroup } from "@/modules/chat/composer/ModelGroupList";
 import ModelLibraryPanel from "@/modules/chat/modals/ModelLibraryPanel";
 import { writeSelectedProvider } from '@/shared/selectedProvider';
+import { useFixedProvider, useFixedProviderResolved } from '@/shared/hooks/useFixedProvider';
 
 const PROVIDER_META: { id: LLMProvider; name: string }[] = [
   { id: "claude", name: "Anthropic" },
@@ -102,6 +103,8 @@ export default function ProviderSelectionEmptyState({
   setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
+  const fixedProvider = useFixedProvider();
+  const fixedProviderResolved = useFixedProviderResolved();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false);
 
@@ -168,151 +171,165 @@ export default function ProviderSelectionEmptyState({
   };
 
   if (!selectedSession && !currentSessionId) {
+    // The picker is offered only once /health has said the agent is not fixed
+    // (CLOUDCLI_FIXED_AGENT). Rendering it before that answer would flash the
+    // agent card and logo on an instance where the operator removed the choice.
+    // The "choose your assistant" copy follows the picker for the same reason.
+    const showProviderPicker = fixedProviderResolved && !fixedProvider;
+
     return (
       <div className="flex h-full items-center justify-center px-4">
         <div className="w-full max-w-[34.25rem]">
           <div className="mb-8 text-center">
             <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
-              {t("providerSelection.title")}
+              {showProviderPicker
+                ? t("providerSelection.title")
+                : t("providerSelection.fixedTitle", { defaultValue: "Start a new conversation" })}
             </h2>
             <p className="mt-1 text-[13px] text-muted-foreground">
-              {t("providerSelection.description")}
+              {showProviderPicker
+                ? t("providerSelection.description")
+                : t("providerSelection.fixedDescription", { defaultValue: "Type your message below to begin" })}
             </p>
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={setPickerOpen}>
-            <DialogTrigger asChild>
-              <Card
-                className="group mx-auto max-w-xs cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
-                role="button"
-                tabIndex={0}
-              >
-                <div className="flex items-center gap-2 p-3">
-                  <LLMProviderLogo
-                    provider={provider}
-                    className="h-5 w-5 shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs font-semibold text-foreground">
-                        {getProviderDisplayName(provider)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">·</span>
-                      <span className="truncate text-xs text-foreground">
-                        {currentModelLabel}
-                      </span>
+          {showProviderPicker && (
+            <>
+              <Dialog open={dialogOpen} onOpenChange={setPickerOpen}>
+                <DialogTrigger asChild>
+                  <Card
+                    className="group mx-auto max-w-xs cursor-pointer border-border/60 transition-all duration-150 hover:border-border hover:shadow-md active:scale-[0.99]"
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="flex items-center gap-2 p-3">
+                      <LLMProviderLogo
+                        provider={provider}
+                        className="h-5 w-5 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-semibold text-foreground">
+                            {getProviderDisplayName(provider)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">·</span>
+                          <span className="truncate text-xs text-foreground">
+                            {currentModelLabel}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {t("providerSelection.clickToChange", {
+                            defaultValue: "Click to change model",
+                          })}
+                        </p>
+                      </div>
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
                     </div>
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">
-                      {t("providerSelection.clickToChange", {
-                        defaultValue: "Click to change model",
-                      })}
-                    </p>
+                  </Card>
+                </DialogTrigger>
+
+                <DialogContent className="max-w-md overflow-hidden p-0">
+                  <DialogTitle>Model Selector</DialogTitle>
+                  <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {t("providerSelection.chooseModel", {
+                          defaultValue: "Choose a model",
+                        })}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {t("providerSelection.chooseModelDescription", {
+                          defaultValue: "Built-in and custom models in one list",
+                        })}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={openModelLibrary}
+                      className="h-8 shrink-0 rounded-lg px-2.5 text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {t("providerSelection.addModel", { defaultValue: "Add model" })}
+                    </Button>
                   </div>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
-                </div>
-              </Card>
-            </DialogTrigger>
+                  <Command filter={modelSearchFilter}>
+                    <CommandInput
+                      value={modelSearch}
+                      onValueChange={setModelSearch}
+                      placeholder={t("providerSelection.searchModels", {
+                        defaultValue: "Search models...",
+                      })}
+                    />
+                    <CommandList className="max-h-[350px]">
+                      <CommandEmpty>
+                        {t("providerSelection.noModelsFound", {
+                          defaultValue: "No models found.",
+                        })}
+                      </CommandEmpty>
+                      <ModelGroupList
+                        groups={visibleProviderGroups}
+                        provider={provider}
+                        currentModel={currentModel}
+                        loading={providerModelsLoading}
+                        searching={modelSearch.trim().length > 0}
+                        onSelect={handleModelSelect}
+                        loadingLabel={t("providerSelection.loadingModels", {
+                          defaultValue: "Loading models…",
+                        })}
+                      />
+                    </CommandList>
+                  </Command>
+                </DialogContent>
+              </Dialog>
 
-            <DialogContent className="max-w-md overflow-hidden p-0">
-              <DialogTitle>Model Selector</DialogTitle>
-              <div className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-4 py-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {t("providerSelection.chooseModel", {
-                      defaultValue: "Choose a model",
+              <Dialog
+                open={modelLibraryOpen}
+                onOpenChange={(open) => {
+                  if (open) {
+                    setModelLibraryOpen(true);
+                  } else {
+                    closeModelLibrary();
+                  }
+                }}
+              >
+                <DialogContent className="flex h-[min(90dvh,46rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col overflow-hidden rounded-3xl p-4 sm:p-5">
+                  <DialogTitle>
+                    {t("providerSelection.manageModels", {
+                      defaultValue: "Manage models",
                     })}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {t("providerSelection.chooseModelDescription", {
-                      defaultValue: "Built-in and custom models in one list",
-                    })}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={openModelLibrary}
-                  className="h-8 shrink-0 rounded-lg px-2.5 text-xs"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  {t("providerSelection.addModel", { defaultValue: "Add model" })}
-                </Button>
-              </div>
-              <Command filter={modelSearchFilter}>
-                <CommandInput
-                  value={modelSearch}
-                  onValueChange={setModelSearch}
-                  placeholder={t("providerSelection.searchModels", {
-                    defaultValue: "Search models...",
-                  })}
-                />
-                <CommandList className="max-h-[350px]">
-                  <CommandEmpty>
-                    {t("providerSelection.noModelsFound", {
-                      defaultValue: "No models found.",
-                    })}
-                  </CommandEmpty>
-                  <ModelGroupList
-                    groups={visibleProviderGroups}
-                    provider={provider}
-                    currentModel={currentModel}
-                    loading={providerModelsLoading}
-                    searching={modelSearch.trim().length > 0}
-                    onSelect={handleModelSelect}
-                    loadingLabel={t("providerSelection.loadingModels", {
-                      defaultValue: "Loading models…",
-                    })}
+                  </DialogTitle>
+                  <ModelLibraryPanel
+                    initialProvider={provider}
+                    providerModelCatalog={providerModelCatalog}
+                    actions={providerModelActions}
+                    onDone={closeModelLibrary}
                   />
-                </CommandList>
-              </Command>
-            </DialogContent>
-          </Dialog>
+                </DialogContent>
+              </Dialog>
 
-          <Dialog
-            open={modelLibraryOpen}
-            onOpenChange={(open) => {
-              if (open) {
-                setModelLibraryOpen(true);
-              } else {
-                closeModelLibrary();
-              }
-            }}
-          >
-            <DialogContent className="flex h-[min(90dvh,46rem)] w-[calc(100vw-1rem)] max-w-4xl flex-col overflow-hidden rounded-3xl p-4 sm:p-5">
-              <DialogTitle>
-                {t("providerSelection.manageModels", {
-                  defaultValue: "Manage models",
-                })}
-              </DialogTitle>
-              <ModelLibraryPanel
-                initialProvider={provider}
-                providerModelCatalog={providerModelCatalog}
-                actions={providerModelActions}
-                onDone={closeModelLibrary}
-              />
-            </DialogContent>
-          </Dialog>
-
-          <p className="mt-4 text-center text-sm text-muted-foreground/70">
-            {
-              {
-                claude: t("providerSelection.readyPrompt.claude", {
-                  model: providerModels.claude,
-                }),
-                cursor: t("providerSelection.readyPrompt.cursor", {
-                  model: providerModels.cursor,
-                }),
-                codex: t("providerSelection.readyPrompt.codex", {
-                  model: providerModels.codex,
-                }),
-                opencode: t("providerSelection.readyPrompt.opencode", {
-                  model: providerModels.opencode,
-                  defaultValue: "Ready with OpenCode {{model}}",
-                }),
-              }[provider]
-            }
-          </p>
+              <p className="mt-4 text-center text-sm text-muted-foreground/70">
+                {
+                  {
+                    claude: t("providerSelection.readyPrompt.claude", {
+                      model: providerModels.claude,
+                    }),
+                    cursor: t("providerSelection.readyPrompt.cursor", {
+                      model: providerModels.cursor,
+                    }),
+                    codex: t("providerSelection.readyPrompt.codex", {
+                      model: providerModels.codex,
+                    }),
+                    opencode: t("providerSelection.readyPrompt.opencode", {
+                      model: providerModels.opencode,
+                      defaultValue: "Ready with OpenCode {{model}}",
+                    }),
+                  }[provider]
+                }
+              </p>
+            </>
+          )}
 
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground/60">
             <Trans

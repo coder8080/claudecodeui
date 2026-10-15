@@ -169,6 +169,8 @@
   "providerSelection": {
     "title": "Elige tu asistente de IA",
     "description": "Selecciona un proveedor para iniciar una conversación nueva",
+    "fixedTitle": "Inicia una nueva conversación",
+    "fixedDescription": "Escribe tu mensaje abajo para empezar",
     "selectModel": "Seleccionar modelo",
     "providerInfo": {
       "anthropic": "de Anthropic",

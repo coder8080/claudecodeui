@@ -160,6 +160,8 @@
   "providerSelection": {
     "title": "בחירת עוזר AI",
     "description": "יש לבחור ספק כדי להתחיל שיחה חדשה",
+    "fixedTitle": "התחילו שיחה חדשה",
+    "fixedDescription": "הקלידו את ההודעה שלכם למטה כדי להתחיל",
     "selectModel": "בחירת מודל",
     "providerInfo": {
       "anthropic": "מאת Anthropic",

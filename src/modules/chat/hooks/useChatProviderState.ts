@@ -10,6 +10,7 @@ import type { PendingPermissionRequest, PermissionMode,
   ProviderModelOption,
   ProviderModelsDefinition } from '@/shared/types';
 import { DEFAULT_EFFORT_VALUE } from '@/shared/constants';
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import { readSelectedProvider, writeSelectedProvider } from '@/shared/selectedProvider';
 
 const FALLBACK_PROVIDER_EFFORT_VALUES: Partial<Record<LLMProvider, readonly string[]>> = {
@@ -430,6 +431,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     setProvider(selectedSession.__provider);
     writeSelectedProvider(selectedSession.__provider);
   }, [provider, selectedSession]);
+
+  // A new chat under an operator agent lock (CLOUDCLI_FIXED_AGENT) must send
+  // with the fixed agent. The initial state above is read synchronously and can
+  // predate /health's answer, so follow the lock once it lands. An open session
+  // keeps its own provider (the effect above).
+  const fixedProvider = useFixedProvider();
+  useEffect(() => {
+    if (!fixedProvider || selectedSession || provider === fixedProvider) {
+      return;
+    }
+
+    setProvider(fixedProvider);
+  }, [fixedProvider, provider, selectedSession]);
 
   // Permission prompts belong to a session, not to the transient provider
   // selection that is synchronized after navigation.

@@ -129,6 +129,8 @@
   "providerSelection": {
     "title": "AIアシスタントを選択",
     "description": "新しい会話を始めるプロバイダーを選択してください",
+    "fixedTitle": "新しい会話を始める",
+    "fixedDescription": "下にメッセージを入力して始めましょう",
     "selectModel": "モデルを選択",
     "providerInfo": {
       "anthropic": "by Anthropic",

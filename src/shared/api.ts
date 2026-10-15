@@ -194,6 +194,10 @@ const pluginAssetPath = (pluginName: string, assetFile: string) =>
 // import a named method instead of assembling URLs of their own.
 
 export const api = {
+  // Public server health: running version, install mode and runtime operator
+  // flags (update-check opt-out, fixed chat agent). No token required.
+  health: (signal?: AbortSignal) => fetch('/health', { signal }),
+
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),

@@ -4,6 +4,7 @@ import type { TFunction } from 'i18next';
 
 import { Button, LLMProviderLogo, Tooltip } from '@/shared/ui';
 import { cn } from '@/shared/utils';
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import type { ProjectSession, RecentConversationListItem, SessionRowActions } from '@/shared/types';
 import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
@@ -32,12 +33,12 @@ type SidebarRecentConversationsProps = {
   t: TFunction;
 };
 
-function RecentConversationSkeleton() {
+function RecentConversationSkeleton({ showProviderIcon }: { showProviderIcon: boolean }) {
   return (
     <div className="space-y-1 px-1" aria-label="Loading recent conversations">
       {Array.from({ length: 8 }).map((_, index) => (
         <div key={index} className="flex items-center gap-2 rounded-lg px-2 py-2.5">
-          <div className="h-7 w-7 animate-pulse rounded-md bg-muted" />
+          {showProviderIcon && <div className="h-7 w-7 animate-pulse rounded-md bg-muted" />}
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${72 - index * 3}%` }} />
             <div className="h-2.5 w-1/2 animate-pulse rounded bg-muted/70" />
@@ -64,8 +65,10 @@ export default function SidebarRecentConversations({
   onRetry,
   t,
 }: SidebarRecentConversationsProps) {
+  // Provider icons are noise when the operator fixed the agent (CLOUDCLI_FIXED_AGENT).
+  const fixedProvider = useFixedProvider();
   if (isLoading && conversations.length === 0) {
-    return <RecentConversationSkeleton />;
+    return <RecentConversationSkeleton showProviderIcon={!fixedProvider} />;
   }
 
   if (hasError && conversations.length === 0) {
@@ -163,12 +166,14 @@ export default function SidebarRecentConversations({
                     : 'text-foreground hover:bg-accent/60',
                 )}
               >
-                <span className={cn(
-                  'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md',
-                  isSelected ? 'bg-primary/10' : 'bg-muted/60',
-                )}>
-                  <LLMProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
-                </span>
+                {!fixedProvider && (
+                  <span className={cn(
+                    'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md',
+                    isSelected ? 'bg-primary/10' : 'bg-muted/60',
+                  )}>
+                    <LLMProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
+                  </span>
+                )}
 
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-normal leading-4">

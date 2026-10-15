@@ -4,6 +4,7 @@ import { LLMProviderLogo } from '@/shared/ui';
 import type { AppTab, Project, ProjectSession } from '@/shared/types';
 import { usePlugins } from '@/modules/plugins';
 import { getSessionTitle } from '@/shared/utils';
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import { useSessionTitleRename } from '@/modules/project-workspace/hooks/useSessionTitleRename';
 
 type WorkspaceTitleProps = {
@@ -58,7 +59,11 @@ export default function WorkspaceTitle({
     ? plugins.find((p) => p.name === activeTab.replace('plugin:', ''))?.displayName
     : undefined;
 
-  const showSessionIcon = activeTab === 'chat' && Boolean(selectedSession);
+  const fixedProvider = useFixedProvider();
+
+  // The provider icon names the agent; with an operator-fixed agent
+  // (CLOUDCLI_FIXED_AGENT) there is nothing to distinguish, so it is hidden.
+  const showSessionIcon = activeTab === 'chat' && Boolean(selectedSession) && !fixedProvider;
   const showChatNewSession = activeTab === 'chat' && !selectedSession;
   const sessionTitle = selectedSession ? getSessionTitle(selectedSession) : '';
 

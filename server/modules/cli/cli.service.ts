@@ -8,7 +8,7 @@ import type {
   CliPackageMetadata,
   SandboxCommandService,
 } from '@/shared/types.js';
-import { isUpdateCheckDisabled, terminalTextStyles } from '@/shared/utils.js';
+import { FIXED_AGENT_PROVIDERS, isUpdateCheckDisabled, parseFixedAgentSetting, terminalTextStyles } from '@/shared/utils.js';
 
 type CliServiceDependencies = {
   applicationRoot: string;
@@ -77,6 +77,21 @@ function isNewerVersion(candidateVersion: string, currentVersion: string): boole
   return false;
 }
 
+// Reports what the server will actually do with CLOUDCLI_FIXED_AGENT, so a typo
+// is flagged here instead of reading as an active lock.
+function describeFixedAgentSetting(environment: CliEnvironment): string {
+  const { provider, invalidValue } = parseFixedAgentSetting(environment);
+  if (provider) {
+    return terminalTextStyles.bright(provider);
+  }
+  if (invalidValue !== null) {
+    return terminalTextStyles.warn(
+      `[WARN] "${invalidValue}" is not a supported agent (expected ${FIXED_AGENT_PROVIDERS.join(', ')}); ignored, users choose the agent`,
+    );
+  }
+  return terminalTextStyles.dim('(not set, users choose the agent)');
+}
+
 function showStatus(dependencies: CliServiceDependencies): void {
   const { environment, fileSystem, output } = dependencies;
   const databasePath = environment.DATABASE_PATH || dependencies.defaultDatabasePath;
@@ -108,6 +123,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       CONTEXT_WINDOW: ${terminalTextStyles.dim(environment.CONTEXT_WINDOW || '160000 (default)')}`);
   output.log(`       CLOUDCLI_DISABLE_UPDATE_CHECK: ${terminalTextStyles.dim(environment.CLOUDCLI_DISABLE_UPDATE_CHECK || '(not set)')}`);
   output.log(`       NO_UPDATE_NOTIFIER: ${terminalTextStyles.dim(environment.NO_UPDATE_NOTIFIER || '(not set)')}`);
+  output.log(`       CLOUDCLI_FIXED_AGENT: ${describeFixedAgentSetting(environment)}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)
@@ -165,6 +181,7 @@ Environment Variables:
   CONTEXT_WINDOW      Set context window size (default: 160000)
   CLOUDCLI_DISABLE_UPDATE_CHECK  Disable automatic update checks (true/1)
   NO_UPDATE_NOTIFIER  Also disables update checks (any non-empty value)
+  CLOUDCLI_FIXED_AGENT  Fix the chat agent: claude, codex, cursor or opencode (hides the agent picker)
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}

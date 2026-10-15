@@ -9,7 +9,7 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getModuleDirectory, getUpdateCheckOptOutVariable, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import { AppError, findApplicationRoot, getFixedAgentProvider, getModuleDirectory, getUpdateCheckOptOutVariable, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
     initializeSessionsWatcher,
@@ -82,6 +82,10 @@ const RUNNING_VERSION = (() => {
 // opt-out and a mistyped one otherwise look identical (both silent).
 const updateCheckOptOutVariable = getUpdateCheckOptOutVariable(process.env);
 const updateCheckDisabled = updateCheckOptOutVariable !== null;
+// Operator lock on the chat agent (CLOUDCLI_FIXED_AGENT). Published on `/health`
+// for the same reason as the update-check opt-out: the web UI reads it at runtime
+// to hide the agent picker and provider icons and to start new chats with it.
+const fixedAgentProvider = getFixedAgentProvider(process.env);
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
@@ -153,7 +157,8 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         installMode,
         version: RUNNING_VERSION,
-        updateCheckDisabled
+        updateCheckDisabled,
+        fixedAgent: fixedAgentProvider
     });
 });
 
@@ -378,6 +383,9 @@ async function startServer() {
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
             if (updateCheckOptOutVariable) {
                 console.log(`${terminalTextStyles.info('[INFO]')} Automatic update checks disabled (${terminalTextStyles.dim(updateCheckOptOutVariable)})`);
+            }
+            if (fixedAgentProvider) {
+                console.log(`${terminalTextStyles.info('[INFO]')} Chat agent fixed to ${terminalTextStyles.bright(fixedAgentProvider)} (${terminalTextStyles.dim('CLOUDCLI_FIXED_AGENT')})`);
             }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

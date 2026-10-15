@@ -6,6 +6,7 @@ import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LL
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
 import { ToolRenderer, ToolErrorDisplay, SubagentPanel, WorkflowPanel, shouldHideToolResult } from '@/modules/chat/tools';
 import { LLMProviderLogo } from '@/shared/ui';
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/modules/chat/transcript/Reasoning';
 import ChatMessageImages from '@/modules/chat/transcript/ChatMessageImages';
 import ChatMessageFiles from '@/modules/chat/transcript/ChatMessageFiles';
@@ -49,6 +50,8 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  */
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
+  // No agent avatar when the operator fixed the agent (CLOUDCLI_FIXED_AGENT).
+  const fixedProvider = useFixedProvider();
   const isGrouped = prevMessage && prevMessage.type === message.type &&
     ((prevMessage.type === 'assistant') ||
       (prevMessage.type === 'user') ||
@@ -213,7 +216,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm text-white dark:bg-gray-700">
                   🔧
                 </div>
-              ) : (
+              ) : fixedProvider ? null : (
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-foreground">
                   <LLMProviderLogo provider={provider} className="h-full w-full" />
                 </div>

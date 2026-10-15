@@ -137,6 +137,8 @@
   "providerSelection": {
     "title": "KI-Assistent wählen",
     "description": "Anbieter auswählen, um eine neue Unterhaltung zu starten",
+    "fixedTitle": "Neue Unterhaltung beginnen",
+    "fixedDescription": "Geben Sie unten Ihre Nachricht ein, um zu beginnen",
     "selectModel": "Modell auswählen",
     "providerInfo": {
       "anthropic": "von Anthropic",

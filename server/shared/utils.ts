@@ -23,6 +23,8 @@ import type {
   AnyRecord,
   ApiSuccessShape,
   AppErrorOptions,
+  FixedAgentSetting,
+  LLMProvider,
   NormalizedMessage,
   ProviderCurrentActiveModel,
   ProviderModelsDefinition,
@@ -75,6 +77,49 @@ export function getUpdateCheckOptOutVariable(environment: NodeJS.ProcessEnv): st
  */
 export function isUpdateCheckDisabled(environment: NodeJS.ProcessEnv): boolean {
   return getUpdateCheckOptOutVariable(environment) !== null;
+}
+
+/** The agents `CLOUDCLI_FIXED_AGENT` accepts, in the order help and warnings list them. */
+export const FIXED_AGENT_PROVIDERS: readonly LLMProvider[] = ['claude', 'codex', 'cursor', 'opencode'];
+
+/**
+ * Parses `CLOUDCLI_FIXED_AGENT` without side effects.
+ *
+ * Accepts `claude`, `codex`, `cursor` or `opencode`, case-insensitive and
+ * whitespace-tolerant. An empty value means "not fixed". Any other value is
+ * reported in `invalidValue` and locks nothing, rather than locking the UI to
+ * an agent that does not exist.
+ *
+ * Consumers: `getFixedAgentProvider` below (server startup) and
+ * `server/modules/cli/cli.service.ts` (`cloudcli status` flags an invalid
+ * value instead of printing it as if it were in effect).
+ */
+export function parseFixedAgentSetting(environment: NodeJS.ProcessEnv): FixedAgentSetting {
+  const raw = environment.CLOUDCLI_FIXED_AGENT?.trim() ?? '';
+  if (raw === '') return { provider: null, invalidValue: null };
+  const value = raw.toLowerCase();
+  const provider = FIXED_AGENT_PROVIDERS.find((candidate) => candidate === value);
+  return provider ? { provider, invalidValue: null } : { provider: null, invalidValue: raw };
+}
+
+/**
+ * Returns the agent an operator pinned the chat UI to with `CLOUDCLI_FIXED_AGENT`,
+ * or `null` when users keep choosing the agent themselves. An invalid value
+ * warns, so a typo is never a silent no-op.
+ *
+ * Consumers: `server/index.ts` (reads it once at startup and publishes it on
+ * `GET /health` as `fixedAgent`, so the prebuilt web UI hides the agent picker
+ * and provider icons and starts every new chat with this agent). Only the UI is
+ * affected: the external `/api/agent` API keeps its own provider default.
+ */
+export function getFixedAgentProvider(environment: NodeJS.ProcessEnv): LLMProvider | null {
+  const { provider, invalidValue } = parseFixedAgentSetting(environment);
+  if (invalidValue !== null) {
+    console.warn(
+      `[WARN] Ignoring CLOUDCLI_FIXED_AGENT="${invalidValue}": expected one of ${FIXED_AGENT_PROVIDERS.join(', ')}. Users keep choosing the agent.`,
+    );
+  }
+  return provider;
 }
 
 // ---------------------------

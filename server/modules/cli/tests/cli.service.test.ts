@@ -113,6 +113,39 @@ test('checks for updates on start when CLOUDCLI_DISABLE_UPDATE_CHECK is unset', 
   assert.equal(harness.getServerStarts(), 1);
 });
 
+const fixedAgentStatusLine = async (value: string | undefined) => {
+  const harness = createHarness();
+  harness.environment.CLOUDCLI_FIXED_AGENT = value;
+
+  const exitCode = await harness.service.run(['status']);
+
+  assert.equal(exitCode, 0);
+  const line = harness.logMessages.find((message) => message.includes('CLOUDCLI_FIXED_AGENT:'));
+  assert.ok(line, 'status lists CLOUDCLI_FIXED_AGENT');
+  // Strip terminal colours so the assertions read the text an operator sees.
+  return line.replace(/\x1b\[[0-9;]*m/g, '');
+};
+
+test('status shows the agent CLOUDCLI_FIXED_AGENT locks the chat to', async () => {
+  const line = await fixedAgentStatusLine(' Codex ');
+
+  assert.match(line, /CLOUDCLI_FIXED_AGENT: codex$/);
+});
+
+test('status flags a mistyped CLOUDCLI_FIXED_AGENT as ignored instead of showing it as active', async () => {
+  const line = await fixedAgentStatusLine('codexx');
+
+  assert.match(line, /\[WARN\] "codexx" is not a supported agent/);
+  assert.match(line, /expected claude, codex, cursor, opencode/);
+  assert.match(line, /ignored, users choose the agent/);
+});
+
+test('status reports an unset CLOUDCLI_FIXED_AGENT as users choosing the agent', async () => {
+  const line = await fixedAgentStatusLine(undefined);
+
+  assert.match(line, /\(not set, users choose the agent\)/);
+});
+
 test('still checks for updates on an explicit update command when the flag is set', async () => {
   const harness = createHarness();
   harness.environment.CLOUDCLI_DISABLE_UPDATE_CHECK = 'true';

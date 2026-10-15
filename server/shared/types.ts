@@ -1592,6 +1592,15 @@ export type CliFileSystem = {
 export type CliEnvironment = Record<string, string | undefined>;
 
 /**
+ * Parsed `CLOUDCLI_FIXED_AGENT`: the agent the chat UI is locked to, and the raw
+ * value when it was set but names no supported agent (so it is ignored).
+ */
+export type FixedAgentSetting = {
+  provider: LLMProvider | null;
+  invalidValue: string | null;
+};
+
+/**
  * Package metadata displayed by CLI help, status, version, and update commands.
  *
  * The composition root reads this once from the application package file and

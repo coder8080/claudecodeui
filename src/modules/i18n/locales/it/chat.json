@@ -137,6 +137,8 @@
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",
     "description": "Seleziona un provider per iniziare una nuova conversazione",
+    "fixedTitle": "Inizia una nuova conversazione",
+    "fixedDescription": "Scrivi il tuo messaggio qui sotto per iniziare",
     "selectModel": "Seleziona modello",
     "providerInfo": {
       "anthropic": "di Anthropic",

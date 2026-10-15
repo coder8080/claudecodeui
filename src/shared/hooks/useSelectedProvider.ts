@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { useFixedProvider } from '@/shared/hooks/useFixedProvider';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import type { LLMProvider } from '@/shared/types';
@@ -18,5 +19,10 @@ export function useSelectedProvider(): LLMProvider {
     setProvider(readSelectedProvider());
   }), []);
 
-  return provider;
+  // An operator agent lock (CLOUDCLI_FIXED_AGENT) arrives from /health after
+  // mount and overrides the stored choice. Read through the external store so
+  // a lock that lands between render and subscription is not missed.
+  const fixedProvider = useFixedProvider();
+
+  return fixedProvider ?? provider;
 }

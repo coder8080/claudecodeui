@@ -167,6 +167,8 @@
   "providerSelection": {
     "title": "選擇您的 AI 助手",
     "description": "選擇一個提供者以開始新對話",
+    "fixedTitle": "開始新對話",
+    "fixedDescription": "在下方輸入訊息即可開始",
     "selectModel": "選擇模型",
     "providerInfo": {
       "anthropic": "由 Anthropic 提供",

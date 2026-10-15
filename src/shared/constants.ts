@@ -162,6 +162,18 @@ export const SETTING_ROW_CLASS =
 
 // ---------------------------
 
+//----------------- SERVER HEALTH REQUEST ------------
+
+/**
+ * Upper bound for a `GET /health` request. Generous on purpose: it only has to break a connection
+ * a proxy is holding open, and a tighter budget makes a cold or slow-but-healthy server look dead.
+ * Used by every `/health` reader (the version check and the fixed-agent store), which fail open
+ * when it fires.
+ */
+export const HEALTH_REQUEST_TIMEOUT_MS = 15000;
+
+// ---------------------------
+
 //----------------- TERMINAL TIMING ------------
 
 /**

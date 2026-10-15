@@ -137,6 +137,8 @@
   "providerSelection": {
     "title": "AI Asistanını Seç",
     "description": "Yeni bir konuşma başlatmak için bir sağlayıcı seç",
+    "fixedTitle": "Yeni bir sohbet başlatın",
+    "fixedDescription": "Başlamak için aşağıya mesajınızı yazın",
     "selectModel": "Model Seç",
     "providerInfo": {
       "anthropic": "Anthropic tarafından",

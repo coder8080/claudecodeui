@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
+import { getFixedProvider, loadFixedProvider } from '@/shared/selectedProvider';
 import { readUserPreference } from '@/shared/userSettings';
 import type { CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
@@ -792,6 +793,19 @@ export function useChatComposerState({
       }
 
       const messageContent = currentInput;
+
+      // A new chat is created under `provider`, and its model options come from
+      // that provider too. If the operator agent lock (CLOUDCLI_FIXED_AGENT)
+      // was still on its way from /health, wait for it; when it names another
+      // agent, keep the draft and stop: useChatProviderState switches the
+      // composer to the fixed agent and its model, and the next send goes there.
+      if (!selectedSession?.id && !currentSessionId) {
+        await loadFixedProvider();
+        const fixedProvider = getFixedProvider();
+        if (fixedProvider && fixedProvider !== provider) {
+          return;
+        }
+      }
 
       let uploadedAttachments = previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {

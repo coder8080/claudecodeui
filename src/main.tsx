@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { scan } from 'react-scan'
 
 import App from '@/App'
+import { loadFixedProvider } from '@/shared/selectedProvider'
 import '@/index.css'
 import 'katex/dist/katex.min.css'
 
@@ -22,6 +23,11 @@ if ('serviceWorker' in navigator) {
     console.warn('Service worker registration failed:', err);
   });
 }
+
+// /health is public, so the operator's agent lock (CLOUDCLI_FIXED_AGENT) can be
+// fetched before login. Starting it here rather than on first use means the
+// chat already knows its agent before the user can send a first message.
+void loadFixedProvider()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

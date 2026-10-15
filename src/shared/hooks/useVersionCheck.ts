@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 
-import { APP_VERSION } from '@/shared/constants';
+import { api } from '@/shared/api';
+import { APP_VERSION, HEALTH_REQUEST_TIMEOUT_MS } from '@/shared/constants';
 import type { InstallMode, ReleaseInfo } from '@/shared/types';
 
 // GET /health .updateCheckDisabled ──→ gate ──┐
@@ -17,11 +18,10 @@ import type { InstallMode, ReleaseInfo } from '@/shared/types';
 // out we fail open into the pre-flag behavior rather than muting update checks
 // forever.
 
-// Generous on purpose: this only has to break a connection a proxy is holding
-// open. A tighter budget makes a cold or slow-but-healthy server look dead, and
-// the bare catch below would then leave installMode at its 'git' default, which
-// is what decides the upgrade command shown to the user.
-const HEALTH_REQUEST_TIMEOUT_MS = 15000;
+// HEALTH_REQUEST_TIMEOUT_MS is generous on purpose: a tighter budget makes a
+// cold or slow-but-healthy server look dead, and the bare catch below would then
+// leave installMode at its 'git' default, which is what decides the upgrade
+// command shown to the user.
 
 /**
  * Compare two semantic version strings
@@ -56,7 +56,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
   useEffect(() => {
     const fetchHealth = async () => {
       try {
-        const response = await fetch('/health', { signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS) });
+        const response = await api.health(AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS));
         const data = await response.json();
         if (data.installMode === 'npm' || data.installMode === 'git') {
           setInstallMode(data.installMode);
