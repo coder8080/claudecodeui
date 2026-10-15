@@ -164,7 +164,7 @@ test('nothing is polled or scheduled before /health has answered', async () => {
   assert.equal(githubCalls.length, 1);
 });
 
-test('installMode and restartRequired are still read from /health when the gate is closed', async () => {
+test('installMode is still read from /health when the gate is closed, but the restart hint is muted', async () => {
   installFetchMock({
     kind: 'json',
     body: { installMode: 'npm', version: '1.2.3', updateCheckDisabled: true },
@@ -175,7 +175,20 @@ test('installMode and restartRequired are still read from /health when the gate 
 
   assert.equal(result.current.installMode, 'npm');
   assert.equal(result.current.runningVersion, '1.2.3');
-  // __APP_VERSION__ is '0.0.0-test' under vitest, so a running 1.2.3 differs.
-  assert.equal(result.current.restartRequired, true);
+  // __APP_VERSION__ is '0.0.0-test' under vitest, so a running 1.2.3 differs,
+  // yet the operator opted out of update notices, so no restart banner.
+  assert.equal(result.current.restartRequired, false);
   assert.equal(result.current.updateAvailable, false);
+});
+
+test('without the opt-out a running/bundle version mismatch raises the restart hint', async () => {
+  installFetchMock({
+    kind: 'json',
+    body: { installMode: 'npm', version: '1.2.3', updateCheckDisabled: false },
+  });
+
+  const { result } = renderVersionCheck();
+  await flush();
+
+  assert.equal(result.current.restartRequired, true);
 });

@@ -11,10 +11,11 @@ import type { InstallMode, ReleaseInfo } from '@/shared/types';
 // define (vite.config.js) — it is frozen into the bundle at build time, which is
 // why the opt-out travels over /health rather than a VITE_ variable.
 //
-// The gate only suppresses the GitHub poll (CLOUDCLI_DISABLE_UPDATE_CHECK /
-// NO_UPDATE_NOTIFIER on the server). `restartRequired` makes no network call and
-// is never suppressed. If `/health` fails or times out we fail open into the
-// pre-flag behavior rather than muting update checks forever.
+// The gate (CLOUDCLI_DISABLE_UPDATE_CHECK / NO_UPDATE_NOTIFIER on the server)
+// suppresses the GitHub poll and the "restart the server" hint: operators who
+// set it manage updates and restarts themselves. If `/health` fails or times
+// out we fail open into the pre-flag behavior rather than muting update checks
+// forever.
 
 // Generous on purpose: this only has to break a connection a proxy is holding
 // open. A tighter budget makes a cold or slow-but-healthy server look dead, and
@@ -65,11 +66,12 @@ export const useVersionCheck = (owner: string, repo: string) => {
         // time, so it reflects the installed (on-disk) package. If they differ,
         // the package was updated but the server process was not restarted, and
         // DB-backed actions may silently fail until it is.
+        const optedOut = data.updateCheckDisabled === true;
         if (typeof data.version === 'string' && data.version.length > 0) {
           setRunningVersion(data.version);
-          setRestartRequired(data.version !== APP_VERSION);
+          setRestartRequired(!optedOut && data.version !== APP_VERSION);
         }
-        setUpdateCheckDisabled(data.updateCheckDisabled === true);
+        setUpdateCheckDisabled(optedOut);
       } catch {
         // Default to git / no restart hint on error
       } finally {
