@@ -178,7 +178,7 @@ Environment Variables:
   PORT                Set server port (default: 3001) (LEGACY)
   DATABASE_PATH       Set custom database location
   CLAUDE_CLI_PATH     Set custom Claude CLI path
-  CONTEXT_WINDOW      Set context window size (default: 160000)
+  CONTEXT_WINDOW      Fallback context window size (default: 160000)
   CLOUDCLI_DISABLE_UPDATE_CHECK  Disable automatic update checks (true/1)
   NO_UPDATE_NOTIFIER  Also disables update checks (any non-empty value)
   CLOUDCLI_FIXED_AGENT  Fix the chat agent: claude, codex, cursor or opencode (hides the agent picker)

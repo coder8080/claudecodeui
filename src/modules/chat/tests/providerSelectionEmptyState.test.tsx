@@ -33,6 +33,7 @@ const MODEL_ACTIONS: ProviderModelActions = {
   create: async () => {},
   update: async () => {},
   remove: async () => {},
+  setCustomModelsOnly: async () => {},
 };
 
 const renderNewChat = (provider: LLMProvider = 'claude') => render(
