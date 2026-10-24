@@ -3,12 +3,11 @@ import type { MutableRefObject } from 'react';
 
 import { api } from '@/shared/api';
 import type { MarkSessionIdle, SessionActivityMap,Project,ProjectSession,LLMProvider,NormalizedMessage,ChatMessage,DiffCalculator } from '@/shared/types';
-import type { SessionSlot, SessionStore } from '@/modules/chat/hooks/useSessionStore';
+import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { SESSION_MESSAGES_PAGE_SIZE } from '@/modules/chat/utils/sessionMessagePagination';
 import { createMessageHistoryRefreshCoordinator } from '@/modules/chat/utils/messageHistoryRefreshCoordinator';
 import { createCachedDiffCalculator } from '@/modules/chat/utils/messageTransforms';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
-import { noteProgrammaticScroll } from '@/modules/chat/hooks/useLazyRowObserver';
 import { findSearchTargetIndex, resolveSearchWindowSize } from '@/modules/chat/utils/searchTargetLocator';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 import { toServerIso } from '@/shared/serverClock';
@@ -26,178 +25,6 @@ const SEARCH_TARGET_CONTEXT_MESSAGES = 20;
  */
 const SEARCH_SCROLL_RETRIES = 20;
 const SEARCH_SCROLL_RETRY_DELAY_MS = 150;
-
-/** Frames a jumped-to row is kept centred while the rows around it mount and settle. */
-const CENTER_SETTLE_FRAMES = 20;
-
-/** Consecutive frames the row must stay put for the re-centring to end early. */
-const CENTER_STABLE_FRAMES = 3;
-
-/**
- * How long a jumped-to row keeps its highlight class at most, counted from
- * the jump. The flash (the 4s `search-flash` animation in index.css) is held
- * back while the row is a placeholder and plays once it mounts, which can be
- * seconds after the jump; the class normally goes when the flash ends. This
- * takes it off a row that never mounted, and also cuts short the flash of a
- * row that mounted more than ROW_FLASH_MAX_MS minus 4s after the jump, which
- * then plays only for what is left of this.
- */
-const ROW_FLASH_MAX_MS = 10_000;
-
-/** Input that means the user is scrolling on their own, which ends a jump: its lookup or its re-centring. */
-const USER_SCROLL_EVENTS = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
-
-/**
- * Makes one scrollTop write to the transcript (`write`) and, when it moved the
- * view, tells the manual scroll anchoring the position is the writer's
- * (noteProgrammaticScroll), which retakes its anchor where the write landed.
- * A write that lands where the view already was is not passed on: the layout
- * may already hold a change above the view the anchoring has not corrected
- * yet, and a retake there would make it the new baseline.
- */
-function writeTranscriptScroll(container: HTMLElement, write: () => void): void {
-  const previousTop = container.scrollTop;
-  write();
-  if (container.scrollTop !== previousTop) noteProgrammaticScroll(container);
-}
-
-/**
- * Starts a jump (a search hit or a reveal) in its own right: stops the jump
- * running before it, registers this one's stop in `stopJumpRef`, where
- * anything that takes the view elsewhere stops it (cancelPendingJump), and
- * stops it on the user's own input on the pane. Both phases of a jump run
- * under one: the lookup for its row, which may not be committed yet, so the
- * caller looks again on later frames or timers, and the re-centring once it is
- * found (centerTranscriptRow), which starts its own and so ends the lookup's.
- * The last attempt of a lookup settles for the nearest row, which, left
- * running, could be any row of whatever the view shows by then, so each step
- * first checks `isCurrent`. `onStop` runs once, however it ends.
- */
-function startJump(
-  container: HTMLElement | null,
-  stopJumpRef: MutableRefObject<(() => void) | null>,
-  onStop: () => void = () => {},
-): { isCurrent: () => boolean; stop: () => void } {
-  stopJumpRef.current?.();
-  let stopped = false;
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    if (container) {
-      for (const type of USER_SCROLL_EVENTS) container.removeEventListener(type, stop);
-    }
-    if (stopJumpRef.current === stop) stopJumpRef.current = null;
-    onStop();
-  };
-  if (container) {
-    for (const type of USER_SCROLL_EVENTS) container.addEventListener(type, stop, { passive: true });
-  }
-  stopJumpRef.current = stop;
-  return { isCurrent: () => !stopped, stop };
-}
-
-/**
- * Scrolls the transcript pane so the row's middle is at the middle of the
- * pane's client box. Written to the pane alone: scrollIntoView would also
- * scroll every scrollable ancestor (the workspace shell, the document), and
- * the re-centring calls this up to CENTER_SETTLE_FRAMES times.
- */
-function centerRowInPane(container: HTMLElement, element: Element): void {
-  writeTranscriptScroll(container, () => {
-    const row = element.getBoundingClientRect();
-    const paneMiddle = container.getBoundingClientRect().top + container.clientTop + container.clientHeight / 2;
-    container.scrollTop += row.top + row.height / 2 - paneMiddle;
-  });
-}
-
-/**
- * Jumps a transcript row to the middle of the view, then keeps it there while
- * the rows around it mount and settle, until the user scrolls or the next jump
- * replaces it. It runs as a jump of its own (startJump), which ends the lookup
- * that found the row, when there was one. A smooth
- * scroll ends off target on a long jump: it aims at estimated row heights,
- * and the corrections that keep the view still while rows mount
- * (useLazyRowObserver) abort it part-way.
- */
-function centerTranscriptRow(
-  container: HTMLElement,
-  element: Element,
-  stopJumpRef: MutableRefObject<(() => void) | null>,
-): void {
-  // Started before the first write, so the jump it replaces cannot write
-  // after it.
-  const jump = startJump(container, stopJumpRef);
-  centerRowInPane(container, element);
-  let lastTop = element.getBoundingClientRect().top;
-  let stableFrames = 0;
-  const settle = (framesLeft: number) => {
-    if (!jump.isCurrent()) return;
-    if (!element.isConnected) {
-      jump.stop();
-      return;
-    }
-    const top = element.getBoundingClientRect().top;
-    if (top === lastTop) {
-      stableFrames += 1;
-    } else {
-      stableFrames = 0;
-      centerRowInPane(container, element);
-      lastTop = element.getBoundingClientRect().top;
-    }
-    if (stableFrames >= CENTER_STABLE_FRAMES || framesLeft <= 1) {
-      jump.stop();
-      return;
-    }
-    requestAnimationFrame(() => settle(framesLeft - 1));
-  };
-  requestAnimationFrame(() => settle(CENTER_SETTLE_FRAMES));
-}
-
-/**
- * Ends the running flash of each row that has one, so an earlier jump's
- * listener and timer cannot take the class off a later jump's flash.
- */
-const endRowFlash = new WeakMap<Element, () => void>();
-
-/**
- * Flashes the row a jump landed on (a search hit or a reveal) with the
- * `search-highlight-flash` class, and takes the class off once the flash has
- * played: on its own `animationend` (not one bubbling up from inside the row,
- * nor another animation of the row), or after ROW_FLASH_MAX_MS. A fixed
- * timer of the animation's length cut the flash short on a row that mounted
- * after the jump.
- *
- * A row still flashing from an earlier jump has its flash restarted. Taking
- * the class off and putting it straight back is no change to the browser,
- * which lets the running animation carry on, so layout is read in between
- * (offsetWidth), with the class off, to end that animation first. Only an
- * `animationend` after this flash's own `animationstart` ends it: the earlier
- * flash's end may already be on its way, and it comes before the restarted
- * flash's start.
- */
-function flashTranscriptRow(element: Element): void {
-  const restarting = endRowFlash.has(element);
-  endRowFlash.get(element)?.();
-  let started = false;
-  const onAnimation = (event: Event) => {
-    if (event.target !== element || (event as AnimationEvent).animationName !== 'search-flash') return;
-    if (event.type === 'animationstart') started = true;
-    else if (started) end();
-  };
-  const fallback = setTimeout(() => end(), ROW_FLASH_MAX_MS);
-  const end = () => {
-    clearTimeout(fallback);
-    element.removeEventListener('animationstart', onAnimation);
-    element.removeEventListener('animationend', onAnimation);
-    if (endRowFlash.get(element) === end) endRowFlash.delete(element);
-    element.classList.remove('search-highlight-flash');
-  };
-  if (restarting) void (element as HTMLElement).offsetWidth;
-  endRowFlash.set(element, end);
-  element.addEventListener('animationstart', onAnimation);
-  element.addEventListener('animationend', onAnimation);
-  element.classList.add('search-highlight-flash');
-}
 
 /**
  * Finds the rendered row for a resolved search target.
@@ -404,10 +231,15 @@ export function useChatSessionState({
   const [searchTarget, setSearchTarget] = useState<SearchTarget | null>(null);
   const searchScrollActiveRef = useRef(false);
   /**
-   * `isUserScrolledUp` readable from a timer callback. Both deferred follows
-   * to the bottom (followToBottom) are armed while the user is at the bottom
-   * and fire tens to hundreds of milliseconds later; without re-reading this
-   * at fire time, a scroll-up inside that window is silently undone.
+   * The pending step of the search-jump retry chain, so a session change can
+   * cancel a jump that belongs to the transcript the user just left.
+   */
+  const searchScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * `isUserScrolledUp` readable from a timer callback. Both deferred
+   * scroll-to-bottom calls are armed while the user is at the bottom and fire
+   * tens to hundreds of milliseconds later; without re-reading this at fire
+   * time, a scroll-up inside that window is silently undone.
    */
   const isUserScrolledUpRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
@@ -415,27 +247,6 @@ export function useChatSessionState({
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
   const pendingInitialScrollRef = useRef(true);
-  const visibleMessageCountRef = useRef(visibleMessageCount);
-  visibleMessageCountRef.current = visibleMessageCount;
-  // Stops the running jump (a search hit or a reveal), whether it is still
-  // looking for its row or already re-centring it.
-  const stopJumpRef = useRef<(() => void) | null>(null);
-  // Everything that takes the view elsewhere ends a pending jump here: the
-  // running one, and a search hit armed but not started yet (its claim and
-  // target are set, and its jump waits for the transcript to load or the
-  // Chat tab to be shown).
-  const cancelPendingJump = useCallback(() => {
-    stopJumpRef.current?.();
-    searchScrollActiveRef.current = false;
-    setSearchTarget(null);
-  }, []);
-  useEffect(() => cancelPendingJump, [cancelPendingJump]);
-  // Counts the opens of a session: each session change (and each New Session
-  // reset) starts a new one. A request captures it before its await, because
-  // the id alone matches again after the user leaves the session and comes
-  // back mid-request, and what it would arm belongs to the open it left.
-  const sessionOpenRef = useRef(0);
-
   const messagesOffsetRef = useRef(0);
   const scrollPositionRef = useRef({ height: 0, top: 0 });
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -459,11 +270,6 @@ export function useChatSessionState({
       return;
     }
     previousNewSessionTriggerRef.current = trigger;
-    sessionOpenRef.current += 1;
-    // A jump into the transcript being left must not land on the fresh draft
-    // (the session change does the same, but it does not run when the route
-    // is unchanged).
-    cancelPendingJump();
 
     /**
      * Consumer-side reset for explicit New Session intent.
@@ -492,15 +298,12 @@ export function useChatSessionState({
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     setAllMessagesLoaded(false);
     allMessagesLoadedRef.current = false;
-    // A load still in flight belongs to the open being left; it leaves these
-    // alone when it lands (the first page, loadOlderMessages, loadAllMessages).
-    isLoadingMoreRef.current = false;
-    setIsLoadingMoreMessages(false);
     setIsLoadingAllMessages(false);
-    setIsLoadingSessionMessages(false);
     setLoadAllJustFinished(false);
     setShowLoadAllOverlay(false);
+    setSearchTarget(null);
     wasNearTopRef.current = false;
+    searchScrollActiveRef.current = false;
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
     pendingInitialScrollRef.current = true;
@@ -514,7 +317,7 @@ export function useChatSessionState({
       clearTimeout(loadAllFinishedTimerRef.current);
       loadAllFinishedTimerRef.current = null;
     }
-  }, [cancelPendingJump, newSessionTrigger, onSessionIdle, resetStreamingState]);
+  }, [newSessionTrigger, onSessionIdle, resetStreamingState]);
 
   /* ---------------------------------------------------------------- */
   /*  Derive processing state for the viewed session                  */
@@ -540,52 +343,6 @@ export function useChatSessionState({
   const activeSessionIdRef = useRef(activeSessionId);
   isActiveRef.current = isActive;
   activeSessionIdRef.current = activeSessionId;
-  // Whether the open a request captured before its await is still the one
-  // showing (sessionOpenRef).
-  const isSameSessionOpen = useCallback((sessionId: string, open: number) => (
-    activeSessionIdRef.current === sessionId && sessionOpenRef.current === open
-  ), []);
-
-  // Widening the window puts rows in front of the first one, like a page of
-  // older messages, so it takes the same restore: the view stays where it was
-  // until the caller scrolls on purpose.
-  const widenVisibleWindow = useCallback((count: number) => {
-    const container = scrollContainerRef.current;
-    // A hidden tab has no position to keep, and a restore armed there would
-    // fire on return and override the follow-to-bottom.
-    const isShown = isActiveRef.current && container && container.getBoundingClientRect().height > 0;
-    if (count > visibleMessageCountRef.current && isShown && !pendingScrollRestoreRef.current) {
-      pendingScrollRestoreRef.current = captureScrollRestoreState(container);
-    }
-    // Advanced now rather than on the next render, so a second widen before
-    // it (two "Load earlier" clicks) counts from this one instead of
-    // collapsing into it. The render reassigns it from state anyway.
-    visibleMessageCountRef.current = Math.max(visibleMessageCountRef.current, count);
-    setVisibleMessageCount((previous) => Math.max(previous, count));
-  }, []);
-
-  // Lands a jump (a search hit or a reveal) on its row: centres it and
-  // flashes it, so the user sees which row they were brought to. Starting a
-  // jump ends the initial settle: left running, it writes the bottom every
-  // frame while the jump re-centres its row, and it can outlast the
-  // re-centring and leave the view at the bottom.
-  const jumpToTranscriptRow = useCallback((container: HTMLElement, element: Element) => {
-    pendingInitialScrollRef.current = false;
-    centerTranscriptRow(container, element, stopJumpRef);
-    flashTranscriptRow(element);
-  }, []);
-
-  // Takes the paging, and the token usage when the store has a report of it,
-  // from the slot of the session showing: the rows it holds are what is
-  // rendered, and its offset is where fetchMore pages on from.
-  const applySlotPaging = useCallback((slot: SessionSlot) => {
-    setHasMoreMessages(slot.hasMore);
-    setTotalMessages(slot.total);
-    messagesOffsetRef.current = slot.offset;
-    if (slot.tokenUsage !== undefined) {
-      setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
-    }
-  }, []);
 
   const latestRefreshExecutorRef = useRef<(sessionId: string) => Promise<boolean | void>>(
     async () => true,
@@ -598,8 +355,14 @@ export function useChatSessionState({
         && activeSessionIdRef.current === sessionId
       ),
     });
-    if (result.slot && activeSessionIdRef.current === sessionId) {
-      applySlotPaging(result.slot);
+    const slot = result.slot;
+    if (slot && activeSessionIdRef.current === sessionId) {
+      setHasMoreMessages(slot.hasMore);
+      setTotalMessages(slot.total);
+      messagesOffsetRef.current = slot.offset;
+      if (slot.tokenUsage !== undefined) {
+        setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+      }
     }
     return !result.deferred;
   };
@@ -683,7 +446,7 @@ export function useChatSessionState({
     }
   }, [activeSessionId, sessionStore]);
 
-  // Mirrors the state into a ref so the two deferred follows to the bottom
+  // Mirrors the state into a ref so the two deferred scroll-to-bottom timers
   // can re-read it at fire time. An effect rather than assignments next to each
   // `setIsUserScrolledUp` call, because the setter is also returned from this
   // hook and driven from the composer.
@@ -691,34 +454,11 @@ export function useChatSessionState({
     isUserScrolledUpRef.current = isUserScrolledUp;
   }, [isUserScrolledUp]);
 
-  const writeScrollBottom = useCallback(() => {
+  const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    writeTranscriptScroll(container, () => { container.scrollTop = container.scrollHeight; });
+    container.scrollTop = container.scrollHeight;
   }, []);
-
-  // The user going to the bottom (the scroll-to-bottom button, a sent
-  // message): that overrides any jump still loading, looking for or settling
-  // on its row.
-  const scrollToBottom = useCallback(() => {
-    cancelPendingJump();
-    writeScrollBottom();
-  }, [cancelPendingJump, writeScrollBottom]);
-
-  // The transcript following the bottom on its own, from a timer armed a
-  // little earlier (new output, an external update's refresh). It is not the
-  // user leaving a jump, so it never stops one: it does nothing while a jump
-  // is pending, which is while a search holds its claim (from the click,
-  // through its transcript fetch, to landing) or any jump is running
-  // (`stopJumpRef`), and while the user is scrolled up. Checked when it
-  // fires, since a jump can start between arming and firing. A follow it
-  // declines is not retried; a search jump that gives up follows once
-  // itself (giveUp in the search effect).
-  const followToBottom = useCallback(() => {
-    if (searchScrollActiveRef.current || stopJumpRef.current) return;
-    if (isUserScrolledUpRef.current) return;
-    writeScrollBottom();
-  }, [writeScrollBottom]);
 
   const scrollToBottomAndReset = useCallback(() => {
     scrollToBottom();
@@ -743,7 +483,6 @@ export function useChatSessionState({
       if (allMessagesLoadedRef.current) return false;
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
-      const open = sessionOpenRef.current;
       isLoadingMoreRef.current = true;
       setIsLoadingMoreMessages(true);
       const scrollRestoreState = captureScrollRestoreState(container);
@@ -756,11 +495,13 @@ export function useChatSessionState({
             && activeSessionIdRef.current === selectedSession.id
           ),
         });
-        // A page for a session the user has since left, even one they came
-        // back to, is not this open's.
-        if (!isSameSessionOpen(selectedSession.id, open)) return false;
         const { slot, prependedCount } = result;
-        applySlotPaging(slot);
+        setHasMoreMessages(slot.hasMore);
+        setTotalMessages(slot.total);
+        messagesOffsetRef.current = slot.offset;
+        if (slot.tokenUsage !== undefined) {
+          setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        }
 
         if (prependedCount === 0) {
           if (!slot.hasMore) {
@@ -788,15 +529,11 @@ export function useChatSessionState({
         }
         return true;
       } finally {
-        // The flags belong to the open that set them. A newer open reset them
-        // and may have a load of its own in flight, which this must not end.
-        if (sessionOpenRef.current === open) {
-          isLoadingMoreRef.current = false;
-          setIsLoadingMoreMessages(false);
-        }
+        isLoadingMoreRef.current = false;
+        setIsLoadingMoreMessages(false);
       }
     },
-    [applySlotPaging, hasMoreMessages, isActive, isLoadingMoreMessages, isSameSessionOpen, selectedProject, selectedSession, sessionStore],
+    [hasMoreMessages, isActive, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
   const handleScroll = useCallback(async () => {
@@ -849,37 +586,28 @@ export function useChatSessionState({
     const container = scrollContainerRef.current;
     if (pendingScrollRestoreRef.current) {
       const { height, top, anchor, anchorOffset } = pendingScrollRestoreRef.current;
-      // Rows swapped in by this commit have already had the view held by the
-      // manual anchoring (their layout effects run first), so the anchor is
-      // measured where that left it and nothing is counted twice. The
-      // fallback sets an absolute position, which a hold cannot add to.
-      writeTranscriptScroll(container, () => {
-        if (anchor?.isConnected && anchorOffset !== null) {
-          const nextAnchorOffset = (
-            anchor.getBoundingClientRect().top
-            - container.getBoundingClientRect().top
-          );
-          container.scrollTop += nextAnchorOffset - anchorOffset;
-        } else {
-          container.scrollTop = top + Math.max(container.scrollHeight - height, 0);
-        }
-      });
+      if (anchor?.isConnected && anchorOffset !== null) {
+        const nextAnchorOffset = (
+          anchor.getBoundingClientRect().top
+          - container.getBoundingClientRect().top
+        );
+        container.scrollTop += nextAnchorOffset - anchorOffset;
+      } else {
+        container.scrollTop = top + Math.max(container.scrollHeight - height, 0);
+      }
       pendingScrollRestoreRef.current = null;
       return;
     }
 
     if (becameActive) {
-      writeTranscriptScroll(container, () => {
-        container.scrollTop = isUserScrolledUp
-          ? scrollPositionRef.current.top
-          : container.scrollHeight;
-      });
+      container.scrollTop = isUserScrolledUp
+        ? scrollPositionRef.current.top
+        : container.scrollHeight;
     }
-  }, [chatMessages.length, isActive, isUserScrolledUp, visibleMessageCount]);
+  }, [chatMessages.length, isActive, isUserScrolledUp]);
 
   // Reset scroll/pagination state on session change
   useEffect(() => {
-    sessionOpenRef.current += 1;
     // A search jump belongs to the transcript it was requested against. Left
     // armed across a session change it did two visible things to the session
     // the user actually opened: the initial scroll bailed (it declines while a
@@ -887,11 +615,15 @@ export function useChatSessionState({
     // retries ran out and started accepting the nearest row by timestamp, it
     // scrolled to an unrelated message and flashed the search highlight on it.
     //
-    // Clearing it here (cancelPendingJump drops a hit not started yet too)
-    // is safe for the jump itself: the effect that reads
+    // Clearing it here is safe for the jump itself: the effect that reads
     // `__searchTargetSnippet` off the newly selected session runs after this
     // one, so a session opened *from* a search result re-arms immediately.
-    cancelPendingJump();
+    if (searchScrollTimerRef.current) {
+      clearTimeout(searchScrollTimerRef.current);
+      searchScrollTimerRef.current = null;
+    }
+    searchScrollActiveRef.current = false;
+    setSearchTarget(null);
 
     pendingInitialScrollRef.current = true;
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
@@ -899,14 +631,7 @@ export function useChatSessionState({
     pendingScrollRestoreRef.current = null;
     wasNearTopRef.current = false;
     setIsUserScrolledUp(false);
-    // A first page, an older page or a "Load all" still in flight belongs to
-    // the open being left, and leaves these alone when it lands, so the new
-    // open's own loads are not held up by it.
-    isLoadingMoreRef.current = false;
-    setIsLoadingMoreMessages(false);
-    setIsLoadingAllMessages(false);
-    setIsLoadingSessionMessages(false);
-  }, [cancelPendingJump, selectedProject?.projectId, selectedSession?.id]);
+  }, [selectedProject?.projectId, selectedSession?.id]);
 
   // Initial scroll to bottom — robust to lazy content reflow.
   // The previous implementation fired one scrollToBottom() at +200ms and
@@ -932,9 +657,7 @@ export function useChatSessionState({
 
     const tick = () => {
       if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;
-      // The loop rewrites the same bottom for its last stable frames, which
-      // the helper does not note.
-      writeTranscriptScroll(container, () => { container.scrollTop = container.scrollHeight; });
+      container.scrollTop = container.scrollHeight;
       if (container.scrollHeight === lastHeight) {
         stableCount++;
       } else {
@@ -1051,7 +774,6 @@ export function useChatSessionState({
     lastLoadedSessionKeyRef.current = sessionKey;
 
     // Fetch from server → store updates → chatMessages re-derives automatically
-    const open = sessionOpenRef.current;
     setIsLoadingSessionMessages(true);
     sessionStore.fetchFromServer(selectedSessionId, {
       limit: SESSION_MESSAGES_PAGE_SIZE,
@@ -1060,25 +782,21 @@ export function useChatSessionState({
         isActiveRef.current
         && activeSessionIdRef.current === selectedSessionId
       ),
-    }).then(outcome => {
-      // A page for a session the user has since left, even one they came
-      // back to, is not this open's, and neither is the loading flag.
-      if (!isSameSessionOpen(selectedSessionId, open)) return;
-      // The page loaded, or the load failed over rows an earlier open left
-      // in the store (`fetchedAt`), which are what is rendered: the slot's
-      // paging describes them. A refused load, or a failed one with nothing
-      // loaded before, leaves the paging reset above.
-      if (outcome && (outcome.ok || outcome.slot.fetchedAt)) {
-        applySlotPaging(outcome.slot);
+    }).then(slot => {
+      if (slot) {
+        setHasMoreMessages(slot.hasMore);
+        setTotalMessages(slot.total);
+        messagesOffsetRef.current = slot.offset;
+        if (slot.tokenUsage !== undefined) {
+          setTokenBudget((slot.tokenUsage as Record<string, unknown> | null) ?? null);
+        }
       }
       setIsLoadingSessionMessages(false);
     }).catch(() => {
-      if (isSameSessionOpen(selectedSessionId, open)) setIsLoadingSessionMessages(false);
+      setIsLoadingSessionMessages(false);
     });
   }, [
-    applySlotPaging,
     isActive,
-    isSameSessionOpen,
     resetStreamingState,
     requestLatestMessages,
     selectedProject,
@@ -1101,31 +819,23 @@ export function useChatSessionState({
     void refreshCoordinatorRef.current?.flushPending(activeSessionId);
   }, [activeSessionId, isActive, sessionStore]);
 
-  // What the external-update effect below reads when an update comes in,
-  // without re-running on it.
-  const externalUpdateTarget = { sessionId: selectedSession?.id ?? null, hasProject: Boolean(selectedProject), isProcessing };
-  const externalUpdateTargetRef = useRef(externalUpdateTarget);
-  externalUpdateTargetRef.current = externalUpdateTarget;
-
-  // External message update (the viewed session's transcript changed on disk
-  // while no run is active here). Keyed on the update count alone: listing
-  // the session object re-ran it for every new object of the same session
-  // (a sidebar search click hands over one), refreshing again and arming
-  // another follow to the bottom each time.
+  // External message update (e.g. WebSocket reconnect, background refresh)
   useEffect(() => {
-    if (!externalMessageUpdate) return;
-    const { sessionId, hasProject, isProcessing: isProcessingNow } = externalUpdateTargetRef.current;
-    if (!sessionId || !hasProject) return;
+    if (!externalMessageUpdate || !selectedSession || !selectedProject) return;
 
     const reloadExternalMessages = async () => {
       try {
         // Skip store refresh during active streaming
-        if (!isProcessingNow) {
+        if (!isProcessing) {
           const shouldStickToBottom = isActiveRef.current && isNearBottom();
-          await requestLatestMessages(sessionId);
+          await requestLatestMessages(selectedSession.id);
 
           if (shouldStickToBottom) {
-            setTimeout(followToBottom, 200);
+            setTimeout(() => {
+              if (!isUserScrolledUpRef.current) {
+                scrollToBottom();
+              }
+            }, 200);
           }
         }
       } catch (error) {
@@ -1134,7 +844,14 @@ export function useChatSessionState({
     };
 
     reloadExternalMessages();
-  }, [externalMessageUpdate, followToBottom, isNearBottom, requestLatestMessages]);
+  }, [
+    externalMessageUpdate,
+    requestLatestMessages,
+    scrollToBottom,
+    selectedProject,
+    selectedSession,
+    isProcessing,
+  ]);
 
   // Search navigation target
   useEffect(() => {
@@ -1158,89 +875,32 @@ export function useChatSessionState({
     setSearchTarget(null);
 
     const scrollToTarget = async () => {
-      // The jump starts here, before its transcript is fetched, so everything
-      // that stops a jump (the user's scrollToBottom, the user's own input, a
-      // newer reveal or search, a session change, unmount) drops it during the
-      // fetch too. Following the bottom on its own does not stop it: it
-      // declines while the jump is pending and is not retried
-      // (followToBottom), so a jump that gives up follows once (giveUp).
-      // Stopping it, for whatever reason, drops its pending retry and
-      // releases the claim, so the follow and the settle are not held off by
-      // a jump that will never land.
-      let retryTimer: ReturnType<typeof setTimeout> | null = null;
-      const lookup = startJump(scrollContainerRef.current, stopJumpRef, () => {
-        if (retryTimer) clearTimeout(retryTimer);
-        searchScrollActiveRef.current = false;
-      });
-      // Stopping a previous jump released the claim; this one holds it again.
-      searchScrollActiveRef.current = true;
-
-      // A jump that gives up (its hit is not in the transcript, or no row
-      // turned up) held the follow and the initial settle off while it was
-      // pending, and nothing re-arms them, so it follows the bottom once,
-      // unless the user is scrolled up. A jump that lands, or is stopped by
-      // anything else (the user, a newer jump, a session change), does not.
-      const giveUp = () => {
-        lookup.stop();
-        followToBottom();
-      };
-
-      // A hidden Chat tab has nothing to centre a row in. The jump is put back
-      // for when the tab is shown again (this effect runs on `isActive` and
-      // declines while hidden), still holding the claim, so the follow and
-      // the settle stay off until it has landed.
-      const waitForChatTab = () => {
-        lookup.stop();
-        searchScrollActiveRef.current = true;
-        setSearchTarget(target);
-      };
-
       if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
-          const requestSessionId = selectedSession.id;
-          const open = sessionOpenRef.current;
           try {
             // Load all messages into the store for search navigation
-            const outcome = await sessionStore.fetchFromServer(requestSessionId, {
+            const slot = await sessionStore.fetchFromServer(selectedSession.id, {
               limit: null,
               offset: 0,
               canRequest: () => (
                 isActiveRef.current
-                && activeSessionIdRef.current === requestSessionId
+                && activeSessionIdRef.current === selectedSession.id
               ),
             });
-            // A transcript for a session the user has since left, even one
-            // they came back to, is not this open's; the session change
-            // already stopped this jump.
-            if (!isSameSessionOpen(requestSessionId, open)) return;
-            // The store reports a failed request through `ok`, not by
-            // throwing: that falls through like the catch below. A loaded one
-            // is in the store whatever became of the jump, so the paging
-            // records it even when the jump was stopped meanwhile; otherwise
-            // scrolling up would page through rows the store already holds.
-            if (outcome?.ok) {
+            if (slot) {
               // Fetch the whole transcript so an old hit can be found, but do
-              // not render all of it; the window below is widened to exactly
+              // not render all of it — the window below is widened to exactly
               // what the resolved target needs.
               setHasMoreMessages(false);
-              setTotalMessages(outcome.slot.total);
-              messagesOffsetRef.current = outcome.slot.offset;
+              setTotalMessages(slot.total);
+              messagesOffsetRef.current = slot.offset;
               setAllMessagesLoaded(true);
               allMessagesLoadedRef.current = true;
+            } else if (!isActiveRef.current) {
+              setSearchTarget(target);
+              return;
             }
-            // A jump stopped for any other reason while its transcript loaded
-            // is over too, and must not stop the jump that replaced it.
-            if (!lookup.isCurrent()) return;
           } catch {
-            if (!isSameSessionOpen(requestSessionId, open)) return;
-            if (!lookup.isCurrent()) return;
             // Fall through and scroll in current messages
-          }
-          // Whatever the fetch did (refused, failed or loaded), behind another
-          // tab the tab's return runs this again, and a fetch that did not
-          // load is retried then.
-          if (!isActiveRef.current) {
-            waitForChatTab();
-            return;
           }
       }
       // Resolve the target against the loaded transcript rather than the DOM.
@@ -1253,7 +913,7 @@ export function useChatSessionState({
       if (targetIndex < 0) {
         // The target is not in the transcript at all. Scrolling somewhere
         // plausible would claim a hit that does not exist.
-        giveUp();
+        searchScrollActiveRef.current = false;
         return;
       }
 
@@ -1264,21 +924,13 @@ export function useChatSessionState({
         targetIndex,
         SEARCH_TARGET_CONTEXT_MESSAGES,
       );
-      widenVisibleWindow(requiredVisibleCount);
+      setVisibleMessageCount((previous) => Math.max(previous, requiredVisibleCount));
 
       const targetTimestamp = messagesForSearch[targetIndex].timestamp;
 
       const scrollToRenderedTarget = (retriesLeft: number) => {
-        if (!lookup.isCurrent()) return;
-        if (!isActiveRef.current) {
-          waitForChatTab();
-          return;
-        }
         const container = scrollContainerRef.current;
-        if (!container) {
-          lookup.stop();
-          return;
-        }
+        if (!container) return;
 
         // The target is inside the window by construction, so this only waits
         // for React to commit the widened list. A target collapsed inside a
@@ -1290,23 +942,27 @@ export function useChatSessionState({
         );
 
         if (targetElement) {
-          // The jump stops the lookup, which releases the claim.
-          jumpToTranscriptRow(container, targetElement);
+          targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          targetElement.classList.add('search-highlight-flash');
+          setTimeout(() => targetElement.classList.remove('search-highlight-flash'), 4000);
+          searchScrollTimerRef.current = null;
+          searchScrollActiveRef.current = false;
           return;
         }
 
         if (retriesLeft > 0) {
-          retryTimer = setTimeout(
+          searchScrollTimerRef.current = setTimeout(
             () => scrollToRenderedTarget(retriesLeft - 1),
             SEARCH_SCROLL_RETRY_DELAY_MS,
           );
           return;
         }
 
-        giveUp();
+        searchScrollTimerRef.current = null;
+        searchScrollActiveRef.current = false;
       };
 
-      retryTimer = setTimeout(
+      searchScrollTimerRef.current = setTimeout(
         () => scrollToRenderedTarget(SEARCH_SCROLL_RETRIES),
         150,
       );
@@ -1355,13 +1011,16 @@ export function useChatSessionState({
     if (!isActive) return;
     if (!scrollContainerRef.current || chatMessages.length === 0) return;
     if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
+    if (searchScrollActiveRef.current) return;
 
-    // followToBottom checks again when the timer fires, for a jump started
-    // or a scroll up made in between.
     if (!isUserScrolledUp) {
-      setTimeout(followToBottom, 50);
+      setTimeout(() => {
+        if (!isUserScrolledUpRef.current) {
+          scrollToBottom();
+        }
+      }, 50);
     }
-  }, [chatMessages.length, followToBottom, isActive, isLoadingMoreMessages, isUserScrolledUp]);
+  }, [chatMessages.length, isActive, isLoadingMoreMessages, isUserScrolledUp, scrollToBottom]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -1378,7 +1037,6 @@ export function useChatSessionState({
     if (!selectedSession || !selectedProject) return;
     if (isLoadingAllMessages) return;
     const requestSessionId = selectedSession.id;
-    const open = sessionOpenRef.current;
     allMessagesLoadedRef.current = true;
     isLoadingMoreRef.current = true;
     setIsLoadingAllMessages(true);
@@ -1392,7 +1050,7 @@ export function useChatSessionState({
     const scrollRestoreState = container ? captureScrollRestoreState(container) : null;
 
     try {
-      const outcome = await sessionStore.fetchFromServer(requestSessionId, {
+      const slot = await sessionStore.fetchFromServer(requestSessionId, {
         limit: null,
         offset: 0,
         canRequest: () => (
@@ -1401,14 +1059,9 @@ export function useChatSessionState({
         ),
       });
 
-      // The user may have switched sessions while the transcript loaded, or
-      // switched away and back, which is a new open of the same session.
-      if (!isSameSessionOpen(requestSessionId, open)) return;
+      if (currentSessionId !== requestSessionId) return;
 
-      // The store reports a failed request through `ok`, not by throwing:
-      // nothing more was loaded, so nothing is armed or shown.
-      if (outcome?.ok) {
-        const { slot } = outcome;
+      if (slot) {
         if (scrollRestoreState) {
           pendingScrollRestoreRef.current = scrollRestoreState;
         }
@@ -1435,13 +1088,10 @@ export function useChatSessionState({
       allMessagesLoadedRef.current = false;
       setShowLoadAllOverlay(false);
     } finally {
-      // As in loadOlderMessages: a newer open's flags are not this one's to end.
-      if (sessionOpenRef.current === open) {
-        isLoadingMoreRef.current = false;
-        setIsLoadingAllMessages(false);
-      }
+      isLoadingMoreRef.current = false;
+      setIsLoadingAllMessages(false);
     }
-  }, [isActive, isSameSessionOpen, selectedSession, selectedProject, isLoadingAllMessages, sessionStore]);
+  }, [isActive, selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionStore]);
 
   /**
    * Fetches the whole transcript into the store and returns it, without
@@ -1449,9 +1099,7 @@ export function useChatSessionState({
    *
    * Export needs every message; the screen does not. Keeping those separate is
    * why exporting a long conversation no longer silently produces a file
-   * containing only its last page. For the same reason a fetch that failed, or
-   * was refused because the user left the session first, rejects instead of
-   * handing back the rows already loaded.
+   * containing only its last page.
    */
   const loadFullTranscript = useCallback(async (): Promise<ChatMessage[]> => {
     const sessionId = activeSessionIdRef.current;
@@ -1459,21 +1107,18 @@ export function useChatSessionState({
       return [];
     }
 
-    const outcome = await sessionStore.fetchFromServer(sessionId, {
+    await sessionStore.fetchFromServer(sessionId, {
       limit: null,
       offset: 0,
       canRequest: () => activeSessionIdRef.current === sessionId,
     });
-    if (!outcome?.ok) {
-      throw new Error(`Could not load the whole transcript of ${sessionId}`);
-    }
 
     return normalizedToChatMessages(sessionStore.getMessages(sessionId));
   }, [sessionStore]);
 
   const loadEarlierMessages = useCallback(() => {
-    widenVisibleWindow(visibleMessageCountRef.current + 100);
-  }, [widenVisibleWindow]);
+    setVisibleMessageCount((prev) => prev + 100);
+  }, []);
 
   // Brings one row into view even when it is outside the visible window or
   // sits in a lazy row that has not mounted: widen the window to include it,
@@ -1482,12 +1127,10 @@ export function useChatSessionState({
   const revealMessage = useCallback((message: ChatMessage) => {
     const index = chatMessages.indexOf(message);
     if (index >= 0) {
-      widenVisibleWindow(visibleCountToReveal(chatMessages.length, index, visibleMessageCountRef.current));
+      setVisibleMessageCount((prev) => visibleCountToReveal(chatMessages.length, index, prev));
     }
 
-    const lookup = startJump(scrollContainerRef.current, stopJumpRef);
     const attempt = (remaining: number) => {
-      if (!lookup.isCurrent()) return;
       const container = scrollContainerRef.current;
       // The widened window commits after this frame, so the row can be absent
       // on the first attempts; only the last one may settle for the nearest
@@ -1495,18 +1138,16 @@ export function useChatSessionState({
       // timestamp), or the first attempt scrolls to an unrelated row and the
       // retries never run.
       const element = container ? findRenderedMessageElement(container, message.timestamp, remaining === 0) : null;
-      if (container && element) {
-        jumpToTranscriptRow(container, element);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
       if (remaining > 0) {
         requestAnimationFrame(() => attempt(remaining - 1));
-      } else {
-        lookup.stop();
       }
     };
     requestAnimationFrame(() => attempt(10));
-  }, [chatMessages, jumpToTranscriptRow, widenVisibleWindow]);
+  }, [chatMessages]);
 
   return {
     chatMessages,

@@ -76,16 +76,6 @@ function createEmptySlot(): SessionSlot {
   };
 }
 
-/**
- * How one fetchFromServer call went: `null` when `canRequest` refused it once
- * its turn in the queue came, otherwise the session's slot and whether this
- * request loaded (`ok`). The slot is shared, and its `status` is rewritten by
- * every later call (a queued refusal sets it back to 'idle', a new call to
- * 'loading'), often before the caller resumes, so `ok` is the only reliable
- * word on this call's success.
- */
-type SessionFetchOutcome = { slot: SessionSlot; ok: boolean } | null;
-
 type SessionHistoryPage = {
   messages: NormalizedMessage[];
   total: number;
@@ -589,9 +579,7 @@ export function useSessionStore() {
    * Fetch messages from the provider sessions endpoint and populate serverMessages.
    *
    * Provider and project metadata are resolved server-side from `sessionId`.
-   * The endpoint returns the standard `{ success, data }` envelope. A failed
-   * request does not throw: it marks the slot 'error' and reports
-   * `ok: false` (SessionFetchOutcome).
+   * The endpoint returns the standard `{ success, data }` envelope.
    */
   const fetchFromServer = useCallback(async (
     sessionId: string,
@@ -600,7 +588,7 @@ export function useSessionStore() {
       offset?: number;
       canRequest?: CanRequestHistory;
     } = {},
-  ): Promise<SessionFetchOutcome> => {
+  ) => {
     const slot = getSlot(sessionId);
     slot.status = 'loading';
     notify(sessionId);
@@ -631,12 +619,12 @@ export function useSessionStore() {
         }
 
         notify(sessionId);
-        return { slot, ok: true };
+        return slot;
       } catch (error) {
         console.error(`[SessionStore] fetch failed for ${sessionId}:`, error);
         slot.status = 'error';
         notify(sessionId);
-        return { slot, ok: false };
+        return slot;
       }
     });
   }, [getSlot, notify]);
