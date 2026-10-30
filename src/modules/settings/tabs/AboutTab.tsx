@@ -1,8 +1,9 @@
-import { ExternalLink, MessageSquare } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import { useVersionCheck } from '@/shared/hooks/useVersionCheck';
+import { SvodMark } from '@/shared/ui';
 
 const GITHUB_REPO_URL = 'https://github.com/siteboon/claudecodeui';
 const DISCORD_URL = 'https://discord.gg/buxwujPNRE';
@@ -34,13 +35,11 @@ export default function AboutTab() {
     <div className="space-y-6">
       {/* Logo + name + version */}
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary/90 shadow-sm">
-          <MessageSquare className="h-5 w-5 text-primary-foreground" />
-        </div>
+        <SvodMark className="h-8 flex-shrink-0" />
         <div>
           <div className="flex items-center gap-2">
             <span
-              className="text-base font-semibold text-foreground"
+              className="text-base font-extrabold text-foreground"
               style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
             >
               SVOD
