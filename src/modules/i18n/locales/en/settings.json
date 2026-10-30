@@ -412,7 +412,7 @@
       "versionUnavailable": "Could not read the version",
       "updateAvailable": "Update available: v{{version}}",
       "upToDate": "Up to date",
-      "bundled": "Ships with CloudCLI and is updated together with it.",
+      "bundled": "Ships with Svod and is updated together with it.",
       "platform": "Managed by the hosting platform.",
       "updateTo": "Update to v{{version}}",
       "runUpdater": "Run updater",

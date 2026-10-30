@@ -408,7 +408,7 @@
       "versionUnavailable": "No se pudo leer la versión",
       "updateAvailable": "Actualización disponible: v{{version}}",
       "upToDate": "Actualizada",
-      "bundled": "Se incluye con CloudCLI y se actualiza junto con él.",
+      "bundled": "Se incluye con Svod y se actualiza junto con él.",
       "platform": "La gestiona la plataforma de alojamiento.",
       "updateTo": "Actualizar a v{{version}}",
       "runUpdater": "Ejecutar actualizador",

@@ -451,7 +451,7 @@ export function createProviderCliService(dependencyOverrides: Partial<ProviderCl
       const provider = dependencies.resolveProvider(providerName);
       const update = resolveUpdateCommand(provider.id);
       if (!update) {
-        throw new AppError(`${getProviderLabel(provider.id)} ships with CloudCLI and is updated together with it.`, {
+        throw new AppError(`${getProviderLabel(provider.id)} ships with Svod and is updated together with it.`, {
           code: 'PROVIDER_CLI_UPDATE_UNAVAILABLE',
           statusCode: 400,
         });

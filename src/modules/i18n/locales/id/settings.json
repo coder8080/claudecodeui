@@ -407,7 +407,7 @@
       "versionUnavailable": "Versi tidak dapat dibaca",
       "updateAvailable": "Pembaruan tersedia: v{{version}}",
       "upToDate": "Sudah terbaru",
-      "bundled": "Disertakan bersama CloudCLI dan diperbarui bersamanya.",
+      "bundled": "Disertakan bersama Svod dan diperbarui bersamanya.",
       "platform": "Dikelola oleh platform hosting.",
       "updateTo": "Perbarui ke v{{version}}",
       "runUpdater": "Jalankan pembaru",

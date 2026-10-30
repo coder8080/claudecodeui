@@ -408,7 +408,7 @@
       "versionUnavailable": "לא ניתן לקרוא את הגרסה",
       "updateAvailable": "עדכון זמין: v{{version}}",
       "upToDate": "מעודכנת",
-      "bundled": "מגיעה עם CloudCLI ומתעדכנת יחד איתו.",
+      "bundled": "מגיעה עם Svod ומתעדכנת יחד איתו.",
       "platform": "מנוהלת על ידי פלטפורמת האירוח.",
       "updateTo": "עדכון ל-v{{version}}",
       "runUpdater": "הפעלת העדכון",
