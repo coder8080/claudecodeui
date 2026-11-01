@@ -752,13 +752,13 @@ async function assertSupportedOpenCode(client: OpencodeClient): Promise<void> {
   } catch (error) {
     // `/global/health` itself only exists from 1.0.224 on.
     throw new Error(
-      `CloudCLI needs OpenCode ${MIN_OPENCODE_VERSION} or newer, and this OpenCode did not report its version `
+      `Svod needs OpenCode ${MIN_OPENCODE_VERSION} or newer, and this OpenCode did not report its version `
       + `(${readErrorMessage(error)}). ${upgradeHint}`,
     );
   }
 
   if (version && !isSupportedOpenCodeVersion(version, MIN_OPENCODE_VERSION)) {
-    throw new Error(`OpenCode ${version} is too old for CloudCLI, which needs ${MIN_OPENCODE_VERSION} or newer. ${upgradeHint}`);
+    throw new Error(`OpenCode ${version} is too old for Svod, which needs ${MIN_OPENCODE_VERSION} or newer. ${upgradeHint}`);
   }
 }
 
