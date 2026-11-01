@@ -18,6 +18,7 @@ import { test } from 'vitest';
  */
 const PERSISTENT_SURFACES = [
   'src/modules/sidebar/SidebarContent.tsx',
+  'src/modules/sidebar/SidebarCollapsed.tsx',
   'src/modules/project-workspace/WorkspaceHeader.tsx',
   'src/modules/project-workspace/WorkspaceStateView.tsx',
   'src/modules/chat/composer/PromptInput.tsx',
