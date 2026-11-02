@@ -10,6 +10,7 @@ import express from 'express';
 
 import providerRouter from '@/modules/providers/provider.routes.js';
 import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
+import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 
 // Issue #109: the Claude CLI applies the permission rules in its own settings
 // files on top of the lists CloudCLI passes it, but the Settings panel never
@@ -262,6 +263,120 @@ test('GET /api/providers/claude/settings-permissions serves the sources and neve
       assert.equal(user.path, userFile);
       assert.deepEqual(user.allow, ['Bash(git status)']);
       assert.equal(await readFile(userFile, 'utf8'), original);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+});
+
+// The web picker starts Claude in the mode the CLI itself would start in, so
+// one setting (permissions.defaultMode, written by provisioning or /config)
+// drives both the terminal and the browser.
+
+const claudeDefaultMode = async (managedFile: string): Promise<string> => (
+  await providerCapabilitiesService.getResolvedProviderCapabilities('claude', managedFile)
+).defaultPermissionMode;
+
+test('the Claude default permission mode follows permissions.defaultMode', async () => {
+  await withHome(async (homeDir) => {
+    const userFile = path.join(homeDir, '.claude', 'settings.json');
+    const managedFile = path.join(homeDir, 'managed', 'managed-settings.json');
+    const cases: Array<[unknown, string]> = [
+      [{ permissions: { defaultMode: 'auto' } }, 'auto'],
+      [{ permissions: { defaultMode: 'acceptEdits', allow: ['Read'] } }, 'acceptEdits'],
+      [{ permissions: { defaultMode: 'plan' } }, 'plan'],
+      // The CLI's alias for the regular mode.
+      [{ permissions: { defaultMode: 'manual' } }, 'default'],
+      // Valid for the CLI, but the picker has no such mode.
+      [{ permissions: { defaultMode: 'dontAsk' } }, 'default'],
+      [{ permissions: { defaultMode: 'autp' } }, 'default'],
+      [{ permissions: { defaultMode: 42 } }, 'default'],
+      [{ permissions: { allow: ['Read'] } }, 'default'],
+      [{ model: 'opus' }, 'default'],
+      ['{ "permissions": { "defaultMode": "auto", }', 'default'],
+    ];
+
+    assert.equal(await claudeDefaultMode(managedFile), 'default', 'no settings files');
+    for (const [settings, expected] of cases) {
+      await writeSettings(userFile, settings);
+      assert.equal(await claudeDefaultMode(managedFile), expected, JSON.stringify(settings));
+    }
+  });
+});
+
+test('the managed permissions.defaultMode wins over the user one', async () => {
+  await withHome(async (homeDir) => {
+    const userFile = path.join(homeDir, '.claude', 'settings.json');
+    const managedFile = path.join(homeDir, 'managed', 'managed-settings.json');
+    await writeSettings(userFile, { permissions: { defaultMode: 'auto' } });
+    await writeSettings(managedFile, { permissions: { defaultMode: 'default' } });
+    assert.equal(await claudeDefaultMode(managedFile), 'default');
+
+    // A managed file without the key leaves the user's choice in place.
+    await writeSettings(managedFile, { permissions: { deny: ['WebSearch'] } });
+    assert.equal(await claudeDefaultMode(managedFile), 'auto');
+
+    // So does a managed file the CLI would not load.
+    await writeSettings(managedFile, '{ "permissions": { "defaultMode": "plan", }');
+    assert.equal(await claudeDefaultMode(managedFile), 'auto');
+
+    // Precedence comes before the picker filter, as in the CLI: a managed mode
+    // the picker cannot show still hides the user's 'auto'.
+    await writeSettings(managedFile, { permissions: { defaultMode: 'dontAsk' } });
+    assert.equal(await claudeDefaultMode(managedFile), 'default');
+  });
+});
+
+test('the default mode is not part of the rule sources response', async () => {
+  await withHome(async (homeDir) => {
+    await writeSettings(path.join(homeDir, '.claude', 'settings.json'), { permissions: { defaultMode: 'auto' } });
+
+    const sources = await claudeSettingsPermissionsService.listRuleSources(path.join(homeDir, 'none.json'));
+
+    assert.doesNotMatch(JSON.stringify(sources), /defaultMode|"auto"/);
+  });
+});
+
+test('GET /api/providers/capabilities serves the Claude default mode from settings.json', async (t) => {
+  await withHome(async (homeDir) => {
+    // The route reads the system managed file, which this test cannot redirect
+    // and which would win over the user file below.
+    const systemSources = await claudeSettingsPermissionsService.listRuleSources();
+    if (bySource(systemSources, 'managed').status !== 'missing') {
+      t.skip('a system managed-settings.json exists on this machine');
+      return;
+    }
+    await writeSettings(path.join(homeDir, '.claude', 'settings.json'), { permissions: { defaultMode: 'auto' } });
+    const staticCapabilities = providerCapabilitiesService.listAllProviderCapabilities();
+
+    const app = express().use('/api/providers', providerRouter);
+    const server = app.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const { port } = server.address() as AddressInfo;
+      type Capabilities = (typeof staticCapabilities)[number];
+
+      const all = await fetch(`http://127.0.0.1:${port}/api/providers/capabilities`);
+      const allPayload = await all.json() as { data: { providers: Capabilities[] } };
+      assert.equal(all.status, 200);
+      for (const capabilities of allPayload.data.providers) {
+        const expected = staticCapabilities.find((entry) => entry.provider === capabilities.provider);
+        assert.deepEqual(
+          capabilities,
+          capabilities.provider === 'claude' ? { ...expected, defaultPermissionMode: 'auto' } : expected,
+          capabilities.provider,
+        );
+      }
+
+      const one = await fetch(`http://127.0.0.1:${port}/api/providers/claude/capabilities`);
+      const onePayload = await one.json() as { data: Capabilities };
+      assert.equal(one.status, 200);
+      assert.equal(onePayload.data.defaultPermissionMode, 'auto');
+
+      // The static matrix the model service reads is left alone.
+      assert.equal(providerCapabilitiesService.getProviderCapabilities('claude').defaultPermissionMode, 'default');
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());

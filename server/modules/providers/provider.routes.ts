@@ -851,7 +851,7 @@ router.get(
   '/capabilities',
   asyncHandler(async (_req: Request, res: Response) => {
     res.json(createApiSuccessResponse({
-      providers: providerCapabilitiesService.listAllProviderCapabilities(),
+      providers: await providerCapabilitiesService.listResolvedProviderCapabilities(),
     }));
   }),
 );
@@ -861,7 +861,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const provider = parseProvider(req.params.provider);
     res.json(createApiSuccessResponse(
-      providerCapabilitiesService.getProviderCapabilities(provider),
+      await providerCapabilitiesService.getResolvedProviderCapabilities(provider),
     ));
   }),
 );

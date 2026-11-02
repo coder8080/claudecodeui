@@ -1,7 +1,10 @@
+import { claudeSettingsPermissionsService } from '@/modules/providers/services/claude-settings-permissions.service.js';
 import type { LLMProvider } from '@/shared/types.js';
 
 /**
  * Static, backend-owned description of what one provider integration supports.
+ * One field is resolved per request: Claude's `defaultPermissionMode` follows
+ * its settings files (see resolveClaudeCapabilities).
  *
  * The frontend renders its composer UI (permission mode picker, image upload,
  * abort button, ...) purely from this shape, which is what keeps the frontend
@@ -124,9 +127,26 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
 };
 
 /**
+ * Claude's starting mode follows `permissions.defaultMode` in its settings
+ * files, so a host configured to start in `auto` opens the web picker in
+ * `auto` too. `manual` is the CLI's alias for `default`; anything the picker
+ * cannot show (`dontAsk`, typos) or no readable file keeps the static default.
+ */
+async function resolveClaudeCapabilities(managedPath?: string): Promise<ProviderCapabilities> {
+  const claude = PROVIDER_CAPABILITIES.claude;
+  const configured = await claudeSettingsPermissionsService.readDefaultMode(managedPath);
+  const mode = configured === 'manual' ? 'default' : configured;
+  if (!mode || !claude.permissionModes.includes(mode) || mode === claude.defaultPermissionMode) {
+    return claude;
+  }
+  return { ...claude, defaultPermissionMode: mode };
+}
+
+/**
  * Application service exposing the provider capability matrix. Used by the
- * Providers routes (the capabilities endpoints) and by the Providers model
- * service, which reads `effortLevels` to validate custom-model effort.
+ * Providers routes (the capabilities endpoints, through the resolved variants
+ * that read Claude's settings files) and by the Providers model service, which
+ * reads `effortLevels` to validate custom-model effort.
  */
 export const providerCapabilitiesService = {
   getProviderCapabilities(provider: LLMProvider): ProviderCapabilities {
@@ -135,5 +155,18 @@ export const providerCapabilitiesService = {
 
   listAllProviderCapabilities(): ProviderCapabilities[] {
     return Object.values(PROVIDER_CAPABILITIES);
+  },
+
+  /** As `getProviderCapabilities`, with Claude's default mode read from its settings files. */
+  async getResolvedProviderCapabilities(provider: LLMProvider, managedPath?: string): Promise<ProviderCapabilities> {
+    return provider === 'claude' ? resolveClaudeCapabilities(managedPath) : PROVIDER_CAPABILITIES[provider];
+  },
+
+  /** As `listAllProviderCapabilities`, with Claude's default mode read from its settings files. */
+  async listResolvedProviderCapabilities(): Promise<ProviderCapabilities[]> {
+    const claude = await resolveClaudeCapabilities();
+    return Object.values(PROVIDER_CAPABILITIES).map((capabilities) => (
+      capabilities.provider === 'claude' ? claude : capabilities
+    ));
   },
 };

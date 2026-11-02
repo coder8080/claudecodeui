@@ -15,9 +15,11 @@ type ProviderCapabilityRow = {
 };
 
 /**
- * Cached at module scope because the matrix is static for the life of the
- * server process and more than one part of the UI asks for it. Without this,
- * opening the sidebar would refetch it on every mount.
+ * Cached at module scope because the fields read here are static for the life
+ * of the server process and more than one part of the UI asks for them. Without
+ * this, opening the sidebar would refetch the matrix on every mount. Claude's
+ * `defaultPermissionMode` is the exception (it follows Claude's settings
+ * files), so do not read it from this cache.
  */
 let cachedCapabilities: Partial<Record<LLMProvider, ProviderCapabilityRow>> | null = null;
 let inFlightRequest: Promise<Partial<Record<LLMProvider, ProviderCapabilityRow>>> | null = null;

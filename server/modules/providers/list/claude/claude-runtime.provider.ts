@@ -319,7 +319,12 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  if (permissionMode && permissionMode !== 'default') {
+  // 'default' is passed too: left out, the CLI would fall back to
+  // permissions.defaultMode from settings.json (e.g. 'auto'), so a user who
+  // picked the regular mode in the UI would silently run in another one.
+  // The mode picked in the UI therefore also wins over a project's
+  // .claude/settings.json defaultMode.
+  if (permissionMode) {
     sdkOptions.permissionMode = permissionMode;
   }
 
@@ -1138,12 +1143,13 @@ async function queryClaudeSDK(
       }]
     };
 
-    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
-    // at the permission-mode step and skips this callback, so interactive tools
-    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
-    // auto-approves them and the model acts on a generated answer. Move these
-    // tools to a PreToolUse hook (runs before the mode check) if we need them
-    // to work in those modes.
+    // In 'auto' the CLI falls back to asking for tools that require user
+    // interaction, so they still reach this callback and the UI
+    // (AskUserQuestion observed; ExitPlanMode not yet checked in 'auto').
+    // Caveat: in 'bypassPermissions' the SDK resolves
+    // approval at the permission-mode step and skips this callback, so those
+    // tools won't reach the UI there; move them to a PreToolUse hook (runs
+    // before the mode check) if they need to work in that mode.
     sdkOptions.canUseTool = async (toolName: string, input: unknown, context?: { signal?: AbortSignal }) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 

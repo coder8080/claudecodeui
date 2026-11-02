@@ -64,26 +64,27 @@ const readRuleList = (value: unknown): string[] => [
   ...new Set((readStringArray(value) ?? []).map((rule) => rule.trim()).filter(Boolean)),
 ];
 
-async function readPermissionSource(
-  scope: ClaudeSettingsPermissionSource['scope'],
-  filePath: string,
-): Promise<ClaudeSettingsPermissionSource> {
-  const empty = { scope, path: filePath, allow: [], deny: [], ask: [] };
+type ClaudeSettingsFile = {
+  status: ClaudeSettingsPermissionSource['status'];
+  /** The parsed top-level object, present exactly when `status` is `ok`. */
+  settings?: Record<string, unknown>;
+};
 
+async function readSettingsFile(filePath: string): Promise<ClaudeSettingsFile> {
   let content: string;
   try {
     if ((await stat(filePath)).size > MAX_SETTINGS_FILE_BYTES) {
-      return { ...empty, status: 'invalid' };
+      return { status: 'invalid' };
     }
     content = decodeSettingsFile(await readFile(filePath));
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    return { ...empty, status: code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'invalid' };
+    return { status: code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'invalid' };
   }
 
   // The CLI loads an empty or whitespace-only file as `{}`.
   if (!content.trim()) {
-    return { ...empty, status: 'ok' };
+    return { status: 'ok', settings: {} };
   }
 
   let settings: Record<string, unknown> | null;
@@ -92,8 +93,17 @@ async function readPermissionSource(
   } catch {
     settings = null;
   }
+  return settings ? { status: 'ok', settings } : { status: 'invalid' };
+}
+
+async function readPermissionSource(
+  scope: ClaudeSettingsPermissionSource['scope'],
+  filePath: string,
+): Promise<ClaudeSettingsPermissionSource> {
+  const empty = { scope, path: filePath, allow: [], deny: [], ask: [] };
+  const { status, settings } = await readSettingsFile(filePath);
   if (!settings) {
-    return { ...empty, status: 'invalid' };
+    return { ...empty, status };
   }
 
   // A file without a `permissions` block is perfectly valid; it just adds no rules.
@@ -107,12 +117,20 @@ async function readPermissionSource(
   };
 }
 
+/** `permissions.defaultMode` of one settings file, as written (unvalidated), or undefined. */
+async function readDefaultModeFrom(filePath: string): Promise<string | undefined> {
+  const { settings } = await readSettingsFile(filePath);
+  const defaultMode = readObjectRecord(settings?.permissions)?.defaultMode;
+  return typeof defaultMode === 'string' && defaultMode.trim() ? defaultMode.trim() : undefined;
+}
+
 /**
  * Read-only view of the permission rules the Claude CLI applies from its own
  * settings files, on top of the allowed/blocked lists CloudCLI passes it.
  *
- * Used by provider.routes.ts for the Claude permissions panel in Settings.
- * Project-level files are left out on purpose: the panel has no project, and
+ * Used by provider.routes.ts for the Claude permissions panel in Settings, and
+ * by provider-capabilities.service.ts for the starting permission mode
+ * (`readDefaultMode`). Project-level files are left out on purpose: the panel has no project, and
  * those files only apply to chats started inside their project. CloudCLI never
  * writes to any of these files.
  */
@@ -123,5 +141,19 @@ export const claudeSettingsPermissionsService = {
       readPermissionSource('user', userSettingsPath()),
       readPermissionSource('managed', managedPath),
     ]);
+  },
+
+  /**
+   * The permission mode the CLI starts in when it is given none: the managed
+   * file's `permissions.defaultMode` wins over the user's, as in the CLI.
+   * Returned as written; callers decide which values they support. Kept out
+   * of `listRuleSources`, whose response carries the rule lists only.
+   */
+  async readDefaultMode(managedPath: string = managedSettingsPath()): Promise<string | undefined> {
+    const [user, managed] = await Promise.all([
+      readDefaultModeFrom(userSettingsPath()),
+      readDefaultModeFrom(managedPath),
+    ]);
+    return managed ?? user;
   },
 };
