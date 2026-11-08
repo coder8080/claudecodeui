@@ -187,6 +187,22 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     triggerBlobDownload(new Blob([content], { type: 'text/plain' }), file.name);
   }, [content, file.name]);
 
+  // Binary files have no text buffer, so the bytes come from the raw content
+  // endpoint (the one the Files tab downloads through) rather than `content`.
+  // Rejects on failure so the caller can show it.
+  const handleDownloadOriginal = useCallback(async () => {
+    if (!fileProjectId) {
+      throw new Error('Missing project identifier');
+    }
+
+    const response = await api.readFileBlob(fileProjectId, filePath);
+    if (!response.ok) {
+      throw new Error(`Failed to download file (${response.status})`);
+    }
+
+    triggerBlobDownload(await response.blob(), fileName);
+  }, [fileName, filePath, fileProjectId]);
+
   // The baseline only changes on load and save, so it is not re-normalised on
   // every keystroke.
   const normalizedSavedContent = useMemo(() => normalizeLineEndings(savedContent), [savedContent]);
@@ -218,5 +234,6 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     hasUnsavedChanges,
     handleSave,
     handleDownload,
+    handleDownloadOriginal,
   };
 };

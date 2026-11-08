@@ -40,6 +40,8 @@ type LazyMessageRowProps = {
    * placeholder and mounts when scrolled toward.
    */
   initiallyNearViewport: boolean;
+  /** Extra classes on the row's own box, which is what the list spaces. */
+  className?: string;
   children: ReactNode;
 };
 
@@ -48,6 +50,7 @@ export default function LazyMessageRow({
   scrollContainerRef,
   timestamp,
   initiallyNearViewport,
+  className,
   children,
 }: LazyMessageRowProps) {
   /**
@@ -139,6 +142,7 @@ export default function LazyMessageRow({
     <div
       ref={elementRef}
       data-message-timestamp={timestamp || undefined}
+      className={className}
       style={isMounted ? undefined : { height: measuredHeight ?? ESTIMATED_ROW_HEIGHT_PX }}
     >
       {isMounted ? children : null}
