@@ -150,7 +150,7 @@
       "title": "Webhook",
       "description": "Odesílá události běhů na váš vlastní HTTP endpoint (například n8n, Home Assistant nebo chatový relay), i když není otevřený žádný prohlížeč.",
       "urlLabel": "Cílová URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Povolit nešifrované HTTP (jen pro tento počítač nebo vaši místní síť)",
       "enabled": "Zapnuto",
       "save": "Uložit",

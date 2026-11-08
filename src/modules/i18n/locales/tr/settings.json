@@ -145,7 +145,7 @@
       "title": "Webhook",
       "description": "Çalıştırma olaylarını, açık bir tarayıcı olmasa bile kendi HTTP uç noktana (örneğin n8n, Home Assistant veya bir sohbet aktarıcısı) gönderir.",
       "urlLabel": "Hedef URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Şifresiz HTTP'ye izin ver (yalnızca bu bilgisayar veya yerel ağın için)",
       "enabled": "Etkin",
       "save": "Kaydet",

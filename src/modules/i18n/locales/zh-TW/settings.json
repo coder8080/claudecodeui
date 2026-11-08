@@ -145,7 +145,7 @@
       "title": "Webhook",
       "description": "即使沒有開啟瀏覽器，也會把執行事件傳送到您自己的 HTTP 端點（例如 n8n、Home Assistant 或聊天轉送服務）。",
       "urlLabel": "目標 URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "允許未加密的 HTTP（僅限本機或本地網路）",
       "enabled": "已啟用",
       "save": "儲存",

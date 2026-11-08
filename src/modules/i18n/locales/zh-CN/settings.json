@@ -170,7 +170,7 @@
       "title": "Webhook",
       "description": "即使没有打开浏览器，也会把运行事件发送到您自己的 HTTP 端点（例如 n8n、Home Assistant 或聊天中转服务）。",
       "urlLabel": "目标 URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "允许未加密的 HTTP（仅限本机或本地网络）",
       "enabled": "已启用",
       "save": "保存",

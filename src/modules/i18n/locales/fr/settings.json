@@ -144,7 +144,7 @@
       "title": "Webhook",
       "description": "Envoie les événements d'exécution vers votre propre point de terminaison HTTP (par exemple n8n, Home Assistant ou un relais de chat), même lorsqu'aucun navigateur n'est ouvert.",
       "urlLabel": "URL de destination",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Autoriser le HTTP non chiffré (uniquement pour cette machine ou votre réseau local)",
       "enabled": "Activé",
       "save": "Enregistrer",

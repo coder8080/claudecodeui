@@ -170,7 +170,7 @@
       "title": "Webhook",
       "description": "Mengirim event proses ke endpoint HTTP milik Anda (misalnya n8n, Home Assistant, atau relay chat), bahkan saat tidak ada browser yang terbuka.",
       "urlLabel": "URL tujuan",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Izinkan HTTP tanpa enkripsi (hanya untuk komputer ini atau jaringan lokal Anda)",
       "enabled": "Aktif",
       "save": "Simpan",

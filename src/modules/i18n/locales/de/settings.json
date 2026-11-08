@@ -144,7 +144,7 @@
       "title": "Webhook",
       "description": "Sendet Lauf-Ereignisse an deinen eigenen HTTP-Endpunkt (zum Beispiel n8n, Home Assistant oder ein Chat-Relay), auch wenn kein Browser geöffnet ist.",
       "urlLabel": "Ziel-URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Unverschlüsseltes HTTP erlauben (nur für diesen Rechner oder dein lokales Netzwerk)",
       "enabled": "Aktiviert",
       "save": "Speichern",

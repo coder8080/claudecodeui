@@ -184,7 +184,7 @@ const tools: ToolDefinition[] = [
   },
   {
     name: 'browser_upload_file',
-    description: 'Attach local files to a file input (defaults to the first input[type=file]). Paths must be absolute files on the CloudCLI host, up to 10 files of 25 MB each.',
+    description: 'Attach local files to a file input (defaults to the first input[type=file]). Paths must be absolute files on the Svod host, up to 10 files of 25 MB each.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -170,7 +170,7 @@
       "title": "Webhook",
       "description": "Envia os eventos de execução para o seu próprio endpoint HTTP (por exemplo n8n, Home Assistant ou um relay de chat), mesmo sem nenhum navegador aberto.",
       "urlLabel": "URL de destino",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Permitir HTTP sem criptografia (somente para esta máquina ou sua rede local)",
       "enabled": "Ativado",
       "save": "Salvar",

@@ -170,7 +170,7 @@
       "title": "웹훅",
       "description": "브라우저가 열려 있지 않아도 실행 이벤트를 직접 지정한 HTTP 엔드포인트(예: n8n, Home Assistant, 채팅 릴레이)로 보냅니다.",
       "urlLabel": "대상 URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "암호화되지 않은 HTTP 허용(이 컴퓨터나 로컬 네트워크 전용)",
       "enabled": "사용",
       "save": "저장",

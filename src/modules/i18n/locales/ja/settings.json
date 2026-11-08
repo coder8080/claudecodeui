@@ -144,7 +144,7 @@
       "title": "Webhook",
       "description": "実行イベントを自分の HTTP エンドポイント（n8n、Home Assistant、チャット中継など）に送信します。ブラウザーを開いていなくても届きます。",
       "urlLabel": "送信先 URL",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "暗号化されていない HTTP を許可する（このマシンまたはローカルネットワーク専用）",
       "enabled": "有効",
       "save": "保存",

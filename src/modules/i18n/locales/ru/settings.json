@@ -144,7 +144,7 @@
       "title": "Вебхук",
       "description": "Отправляет события запусков на ваш собственный HTTP-эндпоинт (например, n8n, Home Assistant или чат-ретранслятор), даже когда браузер не открыт.",
       "urlLabel": "URL назначения",
-      "urlPlaceholder": "https://example.com/hooks/cloudcli",
+      "urlPlaceholder": "https://example.com/hooks/svod",
       "allowHttp": "Разрешить незашифрованный HTTP (только для этого компьютера или вашей локальной сети)",
       "enabled": "Включено",
       "save": "Сохранить",
