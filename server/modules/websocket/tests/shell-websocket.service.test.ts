@@ -736,8 +736,9 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
     launch(dependencies, { provider: 'codex', colorScheme: 'light' }, projectPath);
     launch(dependencies, { provider: 'codex', colorScheme: 'dark' }, projectPath);
 
+    // The login REPL also gets a server-chosen `--session-id` (covered below).
     assert.deepEqual(
-      calls.map((call) => call.command),
+      calls.map((call) => call.command.replace(/ --session-id [0-9a-f-]{36}/, '')),
       ['npx task-master init', loginCommand, 'codex', 'codex']
     );
     assert.deepEqual(
@@ -745,4 +746,209 @@ test('other shells and initial commands only get the COLORFGBG hint', () => {
       ['0;15', '0;15', '0;15', '15;0']
     );
   });
+});
+
+function createEphemeralSessionsSpy() {
+  const excluded: string[] = [];
+  const discarded: string[] = [];
+  return {
+    excluded,
+    discarded,
+    exclude: (id: string) => {
+      excluded.push(id);
+    },
+    discard: async (id: string) => {
+      discarded.push(id);
+    },
+  };
+}
+
+const CLAUDE_LOGIN_COMMAND = 'claude --dangerously-skip-permissions /login';
+
+test('the Claude login REPL gets a known session id that is excluded, then discarded on exit', () => {
+  const pty = createFakePty();
+  const spawnedCommands: string[] = [];
+  const ephemeralSessions = createEphemeralSessionsSpy();
+  const dependencies = {
+    resolveProviderSessionId: () => null,
+    spawnPty: (_shell: string, args: string | string[]) => {
+      spawnedCommands.push(Array.isArray(args) ? args[args.length - 1] : args);
+      return pty as never;
+    },
+    ephemeralSessions,
+  };
+
+  const socket = createFakeSocket();
+  handleShellConnection(socket as never, dependencies);
+  socket.emit('message', JSON.stringify({
+    type: 'init',
+    projectPath: process.cwd(),
+    sessionId: null,
+    hasSession: false,
+    provider: 'plain-shell',
+    isPlainShell: true,
+    initialCommand: CLAUDE_LOGIN_COMMAND,
+  }));
+
+  assert.equal(spawnedCommands.length, 1);
+  const match = spawnedCommands[0].match(/^claude --session-id ([0-9a-f-]{36}) --dangerously-skip-permissions \/login$/);
+  assert.ok(match, `unexpected login command: ${spawnedCommands[0]}`);
+  assert.deepEqual(ephemeralSessions.excluded, [match[1]]);
+  assert.deepEqual(ephemeralSessions.discarded, []);
+
+  // Reopening the modal reattaches to the same REPL: no second id, no new pty.
+  const reopenedSocket = createFakeSocket();
+  handleShellConnection(reopenedSocket as never, dependencies);
+  reopenedSocket.emit('message', JSON.stringify({
+    type: 'init',
+    projectPath: process.cwd(),
+    sessionId: null,
+    hasSession: false,
+    provider: 'plain-shell',
+    isPlainShell: true,
+    initialCommand: CLAUDE_LOGIN_COMMAND,
+  }));
+  assert.equal(spawnedCommands.length, 1);
+  assert.match(reopenedSocket.frames[0], /Reconnected to existing session/);
+
+  pty.emitExit();
+  assert.deepEqual(ephemeralSessions.discarded, [match[1]]);
+});
+
+test('other plain-shell commands and Claude commands that pick their session run unchanged', () => {
+  for (const initialCommand of [
+    'cursor-agent login',
+    'codex login',
+    'claude /loginx',
+    'claude --resume abc /login',
+    'claude --session-id 11111111-1111-1111-1111-111111111111 /login',
+  ]) {
+    const spawnedCommands: string[] = [];
+    const ephemeralSessions = createEphemeralSessionsSpy();
+    const pty = createFakePty();
+    const socket = createFakeSocket();
+    handleShellConnection(socket as never, {
+      resolveProviderSessionId: () => null,
+      spawnPty: (_shell: string, args: string | string[]) => {
+        spawnedCommands.push(Array.isArray(args) ? args[args.length - 1] : args);
+        return pty as never;
+      },
+      ephemeralSessions,
+    });
+    socket.emit('message', JSON.stringify({
+      type: 'init',
+      projectPath: process.cwd(),
+      sessionId: `unchanged-${Date.now()}-${initialCommand.length}`,
+      hasSession: false,
+      provider: 'plain-shell',
+      isPlainShell: true,
+      initialCommand,
+    }));
+
+    assert.deepEqual(spawnedCommands, [initialCommand]);
+    assert.deepEqual(ephemeralSessions.excluded, []);
+    pty.emitExit();
+    assert.deepEqual(ephemeralSessions.discarded, []);
+  }
+});
+
+async function withFixedWorkdir(value: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.CLOUDCLI_FIXED_WORKDIR;
+  process.env.CLOUDCLI_FIXED_WORKDIR = value;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_FIXED_WORKDIR;
+    else process.env.CLOUDCLI_FIXED_WORKDIR = previous;
+  }
+}
+
+test('under CLOUDCLI_FIXED_WORKDIR a terminal cannot start a new agent session elsewhere', async () => {
+  const fixedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-fixed-workdir-'));
+  const otherFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-other-folder-'));
+  try {
+    await withFixedWorkdir(fixedRoot, async () => {
+      const launch = async (
+        projectPath: string,
+        extra: Record<string, unknown>,
+        providerSessionId: string | null = 'native-id',
+      ) => {
+        const spawned: string[] = [];
+        const pty = createFakePty();
+        const socket = createFakeSocket();
+        handleShellConnection(socket as never, {
+          resolveProviderSessionId: () => providerSessionId,
+          spawnPty: (_shell: string, args: string | string[]) => {
+            spawned.push(Array.isArray(args) ? args[args.length - 1] : args);
+            return pty as never;
+          },
+        });
+        socket.emit('message', JSON.stringify({
+          type: 'init',
+          projectPath,
+          sessionId: `fixed-${Date.now()}-${Math.random()}`,
+          provider: 'claude',
+          ...extra,
+        }));
+        // The guard awaits `realpath` on the libuv threadpool, so one tick is
+        // not enough: wait for either outcome (a spawn or the refusal line).
+        const deadline = Date.now() + 2000;
+        while (
+          spawned.length === 0
+          && !socket.frames.join('').includes('New sessions can only be started in')
+          && Date.now() < deadline
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        pty.emitExit();
+        return { spawned, frames: socket.frames };
+      };
+
+      const refused = await launch(otherFolder, { hasSession: false });
+      assert.equal(refused.spawned.length, 0);
+      assert.match(refused.frames.join(''), /New sessions can only be started in/);
+
+      assert.equal((await launch(fixedRoot, { hasSession: false })).spawned.length, 1);
+      // Resuming an existing session and plain shells stay allowed elsewhere,
+      // but a failed resume there must not fall back to a fresh `claude`.
+      const resumed = await launch(otherFolder, { hasSession: true });
+      assert.equal(resumed.spawned.length, 1);
+      assert.match(resumed.spawned[0], /claude --resume "native-id"/);
+      assert.doesNotMatch(resumed.spawned[0], /\|\|/);
+      // A session flag without a resumable provider id would start a fresh CLI.
+      const unresolved = await launch(otherFolder, { hasSession: true }, null);
+      assert.equal(unresolved.spawned.length, 0);
+      assert.match(unresolved.frames.join(''), /New sessions can only be started in/);
+      // Inside the fixed folder the usual fallback is kept.
+      assert.match((await launch(fixedRoot, { hasSession: true })).spawned[0], /\|\| claude/);
+      assert.equal((await launch(otherFolder, { isPlainShell: true, provider: 'plain-shell' })).spawned.length, 1);
+    });
+  } finally {
+    fs.rmSync(fixedRoot, { recursive: true, force: true });
+    fs.rmSync(otherFolder, { recursive: true, force: true });
+  }
+});
+
+test('under CLOUDCLI_FIXED_WORKDIR a socket closed during the folder check spawns nothing', async () => {
+  const fixedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-fixed-workdir-'));
+  try {
+    await withFixedWorkdir(fixedRoot, async () => {
+      const spawned: string[] = [];
+      const socket = createFakeSocket();
+      handleShellConnection(socket as never, {
+        resolveProviderSessionId: () => null,
+        spawnPty: (_shell: string, args: string | string[]) => {
+          spawned.push(Array.isArray(args) ? args[args.length - 1] : args);
+          return createFakePty() as never;
+        },
+      });
+      socket.emit('message', JSON.stringify({ type: 'init', projectPath: fixedRoot, provider: 'claude' }));
+      socket.readyState = WebSocket.CLOSED;
+      socket.emit('close');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(spawned.length, 0);
+    });
+  } finally {
+    fs.rmSync(fixedRoot, { recursive: true, force: true });
+  }
 });

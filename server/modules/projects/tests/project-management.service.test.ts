@@ -115,3 +115,42 @@ test('createProject returns archived reuse outcome when archived row is reused',
   assert.equal(result.outcome, 'reactivated_archived');
   assert.equal(result.project.isArchived, true);
 });
+
+async function withFixedWorkdir(value: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.CLOUDCLI_FIXED_WORKDIR;
+  process.env.CLOUDCLI_FIXED_WORKDIR = value;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_FIXED_WORKDIR;
+    else process.env.CLOUDCLI_FIXED_WORKDIR = previous;
+  }
+}
+
+test('createProject under CLOUDCLI_FIXED_WORKDIR registers only that exact folder', async () => {
+  await withFixedWorkdir('/workspace/fixed', async () => {
+    let persisted = false;
+    const dependencies = (resolvedPath: string) => ({
+      validatePath: async () => ({ valid: true, resolvedPath }),
+      ensureWorkspaceDirectory: async () => undefined,
+      persistProjectPath: () => {
+        persisted = true;
+        return { outcome: 'created' as const, project: projectRow };
+      },
+      getProjectByPath: () => projectRow,
+    });
+
+    await assert.rejects(
+      createProject({ projectPath: '/workspace/other' }, dependencies('/workspace/other')),
+      (error: unknown) => error instanceof AppError && error.statusCode === 403 && error.code === 'FIXED_WORKDIR',
+    );
+    await assert.rejects(
+      createProject({ projectPath: '/workspace/fixed/sub' }, dependencies('/workspace/fixed/sub')),
+      (error: unknown) => error instanceof AppError && error.statusCode === 403 && error.code === 'FIXED_WORKDIR',
+    );
+    assert.equal(persisted, false);
+
+    const result = await createProject({ projectPath: '/workspace/fixed' }, dependencies('/workspace/fixed'));
+    assert.equal(result.outcome, 'created');
+  });
+});

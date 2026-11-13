@@ -146,6 +146,37 @@ test('status reports an unset CLOUDCLI_FIXED_AGENT as users choosing the agent',
   assert.match(line, /\(not set, users choose the agent\)/);
 });
 
+const fixedWorkdirStatusLine = async (value: string | undefined) => {
+  const harness = createHarness();
+  harness.environment.CLOUDCLI_FIXED_WORKDIR = value;
+
+  const exitCode = await harness.service.run(['status']);
+
+  assert.equal(exitCode, 0);
+  const line = harness.logMessages.find((message) => message.includes('CLOUDCLI_FIXED_WORKDIR:'));
+  assert.ok(line, 'status lists CLOUDCLI_FIXED_WORKDIR');
+  return line.replace(/\x1b\[[0-9;]*m/g, '');
+};
+
+test('status shows the absolute folder CLOUDCLI_FIXED_WORKDIR pins sessions to', async () => {
+  const line = await fixedWorkdirStatusLine(' /srv/work/ ');
+
+  assert.match(line, /CLOUDCLI_FIXED_WORKDIR: \/srv\/work$/);
+});
+
+test('status flags a relative CLOUDCLI_FIXED_WORKDIR as ignored', async () => {
+  const line = await fixedWorkdirStatusLine('work');
+
+  assert.match(line, /\[WARN\] "work" is not an absolute path/);
+  assert.match(line, /ignored, sessions may start in any folder/);
+});
+
+test('status reports an unset CLOUDCLI_FIXED_WORKDIR as sessions starting anywhere', async () => {
+  const line = await fixedWorkdirStatusLine(undefined);
+
+  assert.match(line, /\(not set, sessions may start in any folder\)/);
+});
+
 test('still checks for updates on an explicit update command when the flag is set', async () => {
   const harness = createHarness();
   harness.environment.CLOUDCLI_DISABLE_UPDATE_CHECK = 'true';

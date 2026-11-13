@@ -29,7 +29,7 @@ import type {
   SideQuestionEvent,
   SideQuestionRuntime,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
+import { getFixedWorkdir, isFixedWorkdirPath, normalizeProjectPath, parseIncomingJsonObject, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -249,6 +249,25 @@ async function dispatchRun(
   beforeRun?: (run: NonNullable<ReturnType<typeof chatRunRegistry.startRun>>) => void | Promise<void>,
 ): Promise<{ started: boolean; error: string | null }> {
   const provider = session.provider as LLMProvider;
+
+  // A client-supplied cwd would start the provider in another folder than the
+  // session's own, which CLOUDCLI_FIXED_WORKDIR forbids. Checked before the run
+  // is reserved so a refusal leaves nothing to release. A session continuing in
+  // its own (possibly older, unrestricted) project is not affected.
+  const requestedCwd = (data.options as AnyRecord | undefined)?.cwd;
+  const fixedWorkdir = getFixedWorkdir();
+  if (
+    fixedWorkdir
+    && typeof requestedCwd === 'string'
+    && normalizeProjectPath(requestedCwd) !== normalizeProjectPath(session.project_path ?? '')
+    && !(await isFixedWorkdirPath(requestedCwd, fixedWorkdir))
+  ) {
+    const error = `Sessions can only run in ${fixedWorkdir} (CLOUDCLI_FIXED_WORKDIR).`;
+    if (ws) {
+      sendProtocolError(ws, 'FIXED_WORKDIR', error, sessionId);
+    }
+    return { started: false, error };
+  }
 
   const run = chatRunRegistry.startRun({
     appSessionId: sessionId,

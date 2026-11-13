@@ -1,6 +1,8 @@
 import { CheckSquare, Plus, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
+import { isNewSessionAllowedIn } from '@/shared/fixedWorkdir';
+import { useFixedWorkdir } from '@/shared/hooks/useFixedWorkdir';
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
@@ -94,6 +96,9 @@ export default function SidebarProjectSessions({
   t,
 }: SidebarProjectSessionsProps) {
   const isCompact = useCompactSidebar();
+  // Under CLOUDCLI_FIXED_WORKDIR only the fixed project offers a new session;
+  // the others stay browsable and their sessions can still be continued.
+  const canStartNewSession = isNewSessionAllowedIn(project.fullPath, useFixedWorkdir());
 
   if (!isExpanded) {
     return null;
@@ -126,7 +131,7 @@ export default function SidebarProjectSessions({
 
   return (
     <div className="ml-3 space-y-1 border-l border-border pl-3">
-      {isCompact ? (
+      {!canStartNewSession ? null : isCompact ? (
         <div className="px-3 pb-1 pt-1">
           <button
             className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"

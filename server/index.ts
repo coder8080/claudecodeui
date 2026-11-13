@@ -9,9 +9,10 @@ import http from 'http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 
-import { AppError, findApplicationRoot, getFixedAgentProvider, getModuleDirectory, getUpdateCheckOptOutVariable, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
+import { AppError, findApplicationRoot, getFixedAgentProvider, getFixedWorkdir, getModuleDirectory, getUpdateCheckOptOutVariable, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
+    ephemeralSessionsService,
     initializeSessionsWatcher,
     providerRuntimeService,
     reapOrphanedOpenCodeServers,
@@ -55,7 +56,7 @@ import { fileDownloadRoutes, fileTreeRoutes } from './modules/file-tree/index.js
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
-import { initializeDatabase, sessionsDb } from './modules/database/index.js';
+import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
@@ -87,6 +88,11 @@ const updateCheckDisabled = updateCheckOptOutVariable !== null;
 // for the same reason as the update-check opt-out: the web UI reads it at runtime
 // to hide the agent picker and provider icons and to start new chats with it.
 const fixedAgentProvider = getFixedAgentProvider(process.env);
+// Operator lock on the working folder (CLOUDCLI_FIXED_WORKDIR). Unlike the agent
+// lock it is enforced by the server; `/health` publishes the resolved folder
+// (the same string registered as a project at startup) so the web UI can hide
+// project creation and pick that project. Filled in by `prepareFixedWorkdir`.
+let fixedWorkdir: string | null = null;
 const systemRoutes = createSystemModule({
     appRoot: APP_ROOT,
     installMode,
@@ -133,6 +139,7 @@ createWebSocketServer(server, {
 
             return null;
         },
+        ephemeralSessions: ephemeralSessionsService,
     },
     getPluginPort,
 });
@@ -159,7 +166,8 @@ app.get('/health', (req, res) => {
         installMode,
         version: RUNNING_VERSION,
         updateCheckDisabled,
-        fixedAgent: fixedAgentProvider
+        fixedAgent: fixedAgentProvider,
+        fixedWorkdir
     });
 });
 
@@ -346,11 +354,26 @@ async function removeLocalServerMarker() {
     }
 }
 
+// Creates the CLOUDCLI_FIXED_WORKDIR folder when missing and registers it as a
+// project, so it is in the sidebar before its first session. The realpath is
+// what gets registered and published: Claude records a session's cwd resolved,
+// so the project row and the sessions under it share one key.
+async function prepareFixedWorkdir(): Promise<string | null> {
+    const configured = getFixedWorkdir();
+    if (!configured) return null;
+    await fsPromises.mkdir(configured, { recursive: true });
+    const resolved = await fsPromises.realpath(configured);
+    projectsDb.createProjectPath(resolved);
+    return resolved;
+}
+
 // Initialize database and start server
 async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        fixedWorkdir = await prepareFixedWorkdir();
 
         // Configure Web Push (VAPID keys)
         configureWebPush();
@@ -387,6 +410,9 @@ async function startServer() {
             }
             if (fixedAgentProvider) {
                 console.log(`${terminalTextStyles.info('[INFO]')} Chat agent fixed to ${terminalTextStyles.bright(fixedAgentProvider)} (${terminalTextStyles.dim('CLOUDCLI_FIXED_AGENT')})`);
+            }
+            if (fixedWorkdir) {
+                console.log(`${terminalTextStyles.info('[INFO]')} New sessions fixed to ${terminalTextStyles.bright(fixedWorkdir)} (${terminalTextStyles.dim('CLOUDCLI_FIXED_WORKDIR')})`);
             }
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');

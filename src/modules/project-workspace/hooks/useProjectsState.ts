@@ -9,6 +9,8 @@ import type { ServerEvent,
   Project,
   ProjectSession,IsSessionProcessing } from '@/shared/types';
 import { mergeProjectSelectionMetadata } from '@/modules/project-workspace/utils/projectSelectionMetadata';
+import { isNewSessionAllowedIn } from '@/shared/fixedWorkdir';
+import { useFixedWorkdir } from '@/shared/hooks/useFixedWorkdir';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 
 type UseProjectsStateArgs = {
@@ -710,12 +712,21 @@ export function useProjectsState({
     void hydrateProjectTaskMaster(selectedProject.projectId);
   }, [hydrateProjectTaskMaster, selectedProject?.projectId]);
 
-  // Auto-select the project when there is only one, so the user lands on the new session page
+  // Auto-select the project when there is only one, or the CLOUDCLI_FIXED_WORKDIR
+  // project when the operator pinned one, so the user lands on the new session page
+  const fixedWorkdir = useFixedWorkdir();
   useEffect(() => {
-    if (!isLoadingProjects && projects.length === 1 && !selectedProject && !sessionId) {
-      setSelectedProject(projects[0]);
+    if (isLoadingProjects || selectedProject || sessionId) {
+      return;
     }
-  }, [isLoadingProjects, projects, selectedProject, sessionId]);
+    const fixedProject = fixedWorkdir
+      ? projects.find((project) => isNewSessionAllowedIn(project.fullPath, fixedWorkdir))
+      : undefined;
+    const projectToSelect = fixedProject ?? (projects.length === 1 ? projects[0] : undefined);
+    if (projectToSelect) {
+      setSelectedProject(projectToSelect);
+    }
+  }, [fixedWorkdir, isLoadingProjects, projects, selectedProject, sessionId]);
 
   // Realtime sidebar updates. The backend pushes per-session deltas
   // (`session_upserted`) instead of full project snapshots, so each event is

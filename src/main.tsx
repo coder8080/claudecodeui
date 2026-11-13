@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { scan } from 'react-scan'
 
 import App from '@/App'
+import { loadFixedWorkdir } from '@/shared/fixedWorkdir'
 import { loadFixedProvider } from '@/shared/selectedProvider'
 import '@/index.css'
 import 'katex/dist/katex.min.css'
@@ -28,6 +29,8 @@ if ('serviceWorker' in navigator) {
 // fetched before login. Starting it here rather than on first use means the
 // chat already knows its agent before the user can send a first message.
 void loadFixedProvider()
+// Same request (shared): the operator's working-folder lock (CLOUDCLI_FIXED_WORKDIR).
+void loadFixedWorkdir()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

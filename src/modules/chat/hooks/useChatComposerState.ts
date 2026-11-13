@@ -1295,7 +1295,11 @@ export function useChatComposerState({
             initialMessage: messageContent,
           });
           if (!response.ok) {
-            throw new Error(`Failed to create session (${response.status})`);
+            // The server explains refusals such as CLOUDCLI_FIXED_WORKDIR
+            // ("Sessions can only be created in ...") in `error.message`.
+            const errorBody = await response.json().catch(() => null);
+            const serverMessage = typeof errorBody?.error?.message === 'string' ? errorBody.error.message : '';
+            throw new Error(serverMessage || `Failed to create session (${response.status})`);
           }
           const body = await response.json();
           targetSessionId = body?.data?.sessionId || null;

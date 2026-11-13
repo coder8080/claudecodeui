@@ -171,3 +171,33 @@ test('forking a session that does not exist is a 404', async () => {
     );
   });
 });
+
+async function withFixedWorkdir(value: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.CLOUDCLI_FIXED_WORKDIR;
+  process.env.CLOUDCLI_FIXED_WORKDIR = value;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_FIXED_WORKDIR;
+    else process.env.CLOUDCLI_FIXED_WORKDIR = previous;
+  }
+}
+
+test('under CLOUDCLI_FIXED_WORKDIR a session outside the folder cannot be forked', async () => {
+  await withForkableClaude(async ({ calls, directory }) => {
+    seedSource(directory);
+
+    await withFixedWorkdir(path.join(directory, 'fixed'), async () => {
+      await assert.rejects(
+        sessionsService.forkSessionById(SOURCE_ID),
+        (error: unknown) => (error as { code?: string }).code === 'FIXED_WORKDIR',
+      );
+    });
+    assert.equal(calls.length, 0);
+
+    await withFixedWorkdir(directory, async () => {
+      await sessionsService.forkSessionById(SOURCE_ID);
+    });
+    assert.equal(calls.length, 1);
+  });
+});

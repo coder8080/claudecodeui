@@ -42,7 +42,8 @@ type Page = 'actions' | 'files' | 'sessions' | 'commits' | 'branches';
 
 type CommandPaletteProps = {
   selectedProject: Project | null;
-  onStartNewChat: (project: Project) => void;
+  /** Absent when no new chat may start in the selected project (CLOUDCLI_FIXED_WORKDIR); hides the action. */
+  onStartNewChat?: (project: Project) => void;
   onOpenSettings: (tab?: string) => void;
   onShowTab?: (tab: AppTab) => void;
 };
@@ -190,20 +191,22 @@ function CommandPalette({
 
             {showActions && (
               <CommandGroup heading={t('commandPalette.groupActions')}>
-                <CommandItem
-                  value={`${t('commandPalette.startNewChat')} new chat`}
-                  disabled={startNewChatDisabled}
-                  onSelect={() => {
-                    if (!selectedProject) return;
-                    run(() => onStartNewChat(selectedProject));
-                  }}
-                >
-                  <MessageSquarePlus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                  <span className="flex-1">{t('commandPalette.startNewChat')}</span>
-                  {startNewChatDisabled && (
-                    <span className="text-xs text-muted-foreground">{t('commandPalette.selectProjectFirst')}</span>
-                  )}
-                </CommandItem>
+                {onStartNewChat && (
+                  <CommandItem
+                    value={`${t('commandPalette.startNewChat')} new chat`}
+                    disabled={startNewChatDisabled}
+                    onSelect={() => {
+                      if (!selectedProject) return;
+                      run(() => onStartNewChat(selectedProject));
+                    }}
+                  >
+                    <MessageSquarePlus className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="flex-1">{t('commandPalette.startNewChat')}</span>
+                    {startNewChatDisabled && (
+                      <span className="text-xs text-muted-foreground">{t('commandPalette.selectProjectFirst')}</span>
+                    )}
+                  </CommandItem>
+                )}
                 <CommandItem value={`${t('commandPalette.openSettings')} settings`} onSelect={() => run(() => onOpenSettings())}>
                   <Settings className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="flex-1">{t('commandPalette.openSettings')}</span>

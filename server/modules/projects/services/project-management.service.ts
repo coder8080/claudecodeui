@@ -7,7 +7,7 @@ import type {
   ProjectRepositoryRow,
   WorkspacePathValidationResult,
 } from '@/shared/types.js';
-import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, assertFixedWorkdirPath, normalizeProjectPath, validateWorkspacePath } from '@/shared/utils.js';
 
 type CreateProjectInput = {
   projectPath: string;
@@ -107,6 +107,8 @@ export async function createProject(
   }
 
   const resolvedProjectPath = normalizeProjectPath(pathValidation.resolvedPath);
+  // Covers the wizard, clones and worktree registration alike.
+  await assertFixedWorkdirPath(resolvedProjectPath, 'Projects can only be created');
   await dependencies.ensureWorkspaceDirectory(resolvedProjectPath);
 
   const normalizedCustomName = resolveDisplayName(input.customName ?? null, resolvedProjectPath);

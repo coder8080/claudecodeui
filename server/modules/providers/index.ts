@@ -15,6 +15,11 @@ export { sessionsService } from './services/sessions.service.js';
 // OpenCode turn servers a killed CloudCLI process left running.
 export { reapOrphanedOpenCodeServers } from './list/opencode/opencode-runtime.provider.js';
 
+// ephemeralSessionsService: used by the server entrypoint, which injects it into
+// the shell websocket so the Claude login REPL never becomes a sidebar session
+// or project and its transcript is deleted when the PTY exits.
+export { ephemeralSessionsService } from './services/ephemeral-sessions.service.js';
+
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
 

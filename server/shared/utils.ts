@@ -26,6 +26,7 @@ import type {
   AppErrorOptions,
   CliVersionProbe,
   FixedAgentSetting,
+  FixedWorkdirSetting,
   LLMProvider,
   NormalizedMessage,
   ProviderCurrentActiveModel,
@@ -123,6 +124,115 @@ export function getFixedAgentProvider(environment: NodeJS.ProcessEnv): LLMProvid
     );
   }
   return provider;
+}
+
+// ---------------------------
+//----------------- FIXED WORKDIR UTILITIES ------------
+/**
+ * Parses `CLOUDCLI_FIXED_WORKDIR` without side effects.
+ *
+ * The value is trimmed; `~` and `~/...` expand to the OS home directory. The
+ * result must be absolute, otherwise it is reported in `invalidValue` and
+ * nothing is locked (a relative path would silently depend on the server's
+ * launch directory). An empty value means "not fixed".
+ *
+ * Consumers: `getFixedWorkdir` below and `server/modules/cli/cli.service.ts`
+ * (`cloudcli status` flags an invalid value instead of printing it as active).
+ */
+export function parseFixedWorkdirSetting(environment: NodeJS.ProcessEnv): FixedWorkdirSetting {
+  const raw = environment.CLOUDCLI_FIXED_WORKDIR?.trim() ?? '';
+  if (raw === '') return { path: null, invalidValue: null };
+
+  let expanded = raw;
+  if (raw === '~') {
+    expanded = os.homedir();
+  } else if (raw.startsWith('~/') || raw.startsWith('~\\')) {
+    expanded = path.join(os.homedir(), raw.slice(2));
+  }
+
+  if (!path.isAbsolute(expanded)) {
+    return { path: null, invalidValue: raw };
+  }
+  return { path: normalizeProjectPath(path.resolve(expanded)), invalidValue: null };
+}
+
+const warnedInvalidFixedWorkdirValues = new Set<string>();
+
+/**
+ * Returns the folder an operator pinned every new session to with
+ * `CLOUDCLI_FIXED_WORKDIR`, or `null` when sessions may start anywhere.
+ *
+ * Read from `process.env` on every call (parsing is cheap) so tests can toggle
+ * the lock; an invalid value warns once per distinct value.
+ *
+ * Consumers: `server/index.ts` (creates and registers the folder at startup and
+ * publishes it on `GET /health` as `fixedWorkdir`), the shell websocket service
+ * and the websocket chat gateway (which pass it to `isFixedWorkdirPath`), and
+ * `isFixedWorkdirPath` / `assertFixedWorkdirPath` below. An empty terminal path
+ * still defaults to the server's cwd: the Claude login REPL runs there.
+ * Unlike `CLOUDCLI_FIXED_AGENT` this is enforced by the server; the external
+ * `/api/agent` API is deliberately left unrestricted.
+ */
+export function getFixedWorkdir(environment: NodeJS.ProcessEnv = process.env): string | null {
+  const { path: fixedWorkdir, invalidValue } = parseFixedWorkdirSetting(environment);
+  if (invalidValue !== null && !warnedInvalidFixedWorkdirValues.has(invalidValue)) {
+    warnedInvalidFixedWorkdirValues.add(invalidValue);
+    console.warn(
+      `[WARN] Ignoring CLOUDCLI_FIXED_WORKDIR="${invalidValue}": expected an absolute path or one starting with ~/. Sessions may start in any folder.`,
+    );
+  }
+  return fixedWorkdir;
+}
+
+async function resolveComparablePath(candidatePath: string): Promise<string> {
+  const absolutePath = path.resolve(normalizeProjectPath(candidatePath));
+  try {
+    return normalizeProjectPath(await realpath(absolutePath));
+  } catch {
+    // A folder that does not exist yet is compared by its normalized spelling.
+    return normalizeProjectPath(absolutePath);
+  }
+}
+
+/**
+ * Reports whether a new session may be started in `candidatePath`: always
+ * `true` without a `CLOUDCLI_FIXED_WORKDIR` lock, otherwise only when the path
+ * is that exact folder (symlinks resolved on both sides; subfolders do not
+ * count). An empty candidate is never the fixed folder.
+ *
+ * Consumers: `assertFixedWorkdirPath` below, the shell websocket service (which
+ * reports a refusal inside the terminal instead of throwing) and the websocket
+ * chat gateway (which answers a client-supplied `cwd` with a protocol error).
+ */
+export async function isFixedWorkdirPath(
+  candidatePath: string,
+  fixedWorkdir: string | null = getFixedWorkdir(),
+): Promise<boolean> {
+  if (!fixedWorkdir) return true;
+  if (!normalizeProjectPath(candidatePath)) return false;
+  const [resolvedCandidate, resolvedFixed] = await Promise.all([
+    resolveComparablePath(candidatePath),
+    resolveComparablePath(fixedWorkdir),
+  ]);
+  return resolvedCandidate === resolvedFixed;
+}
+
+/**
+ * Throws a 403 `AppError` with code `FIXED_WORKDIR` when `CLOUDCLI_FIXED_WORKDIR`
+ * is set and `candidatePath` is not that folder. `action` completes the message
+ * ("Sessions can only be created in ...").
+ *
+ * Consumers: the projects module (create project, clone), the worktrees module
+ * (create worktree), the providers routes (`POST /sessions`, a new app session)
+ * and the providers sessions service (fork).
+ */
+export async function assertFixedWorkdirPath(candidatePath: string, action = 'Sessions can only be created'): Promise<void> {
+  const fixedWorkdir = getFixedWorkdir();
+  if (await isFixedWorkdirPath(candidatePath, fixedWorkdir)) return;
+  throw new AppError(`${action} in ${fixedWorkdir} (CLOUDCLI_FIXED_WORKDIR).`, {
+    code: 'FIXED_WORKDIR',
+    statusCode: 403,
+  });
 }
 
 // ---------------------------

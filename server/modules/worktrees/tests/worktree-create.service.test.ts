@@ -140,3 +140,26 @@ test('createWorktree rejects an occupied destination without running a mutating 
 
   assert.equal(calls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'add'), false);
 });
+
+async function withFixedWorkdir(value: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.CLOUDCLI_FIXED_WORKDIR;
+  process.env.CLOUDCLI_FIXED_WORKDIR = value;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_FIXED_WORKDIR;
+    else process.env.CLOUDCLI_FIXED_WORKDIR = previous;
+  }
+}
+
+test('createWorktree under CLOUDCLI_FIXED_WORKDIR refuses before running git worktree add', async () => {
+  await withFixedWorkdir('/home/user/repo', async () => {
+    const { calls, runner } = createFakeRunner([]);
+
+    await assert.rejects(
+      createWorktree({ projectPath: '/home/user/repo', branch: 'feature/x' }, createDependencies(runner)),
+      (error: unknown) => error instanceof AppError && error.statusCode === 403 && error.code === 'FIXED_WORKDIR',
+    );
+    assert.equal(calls.some((call) => call.args[0] === 'worktree' && call.args[1] === 'add'), false);
+  });
+});

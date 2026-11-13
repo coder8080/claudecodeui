@@ -15,7 +15,7 @@ import type {
   NormalizedMessage,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
-import { AppError, sliceTailPage } from '@/shared/utils.js';
+import { AppError, assertFixedWorkdirPath, sliceTailPage } from '@/shared/utils.js';
 
 /**
  * One session the running-sessions poll reports as busy.
@@ -345,6 +345,10 @@ export const sessionsService = {
         statusCode: 409,
       });
     }
+
+    // A fork is a new session in the source's folder, so CLOUDCLI_FIXED_WORKDIR
+    // applies even though continuing the source itself stays allowed.
+    await assertFixedWorkdirPath(source.project_path ?? '');
 
     const sessionName = options.title?.trim()
       || `${source.custom_name?.trim() || 'Session'} (fork)`;

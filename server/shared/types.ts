@@ -1779,6 +1779,16 @@ export type FixedAgentSetting = {
 };
 
 /**
+ * Parsed `CLOUDCLI_FIXED_WORKDIR`: the single folder every new session must run
+ * in (absolute, `~` expanded, normalized), and the raw value when it was set but
+ * is not usable (a relative path), in which case nothing is locked.
+ */
+export type FixedWorkdirSetting = {
+  path: string | null;
+  invalidValue: string | null;
+};
+
+/**
  * Package metadata displayed by CLI help, status, version, and update commands.
  *
  * The composition root reads this once from the application package file and

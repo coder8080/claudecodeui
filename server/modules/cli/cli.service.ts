@@ -8,7 +8,7 @@ import type {
   CliPackageMetadata,
   SandboxCommandService,
 } from '@/shared/types.js';
-import { FIXED_AGENT_PROVIDERS, isUpdateCheckDisabled, parseFixedAgentSetting, terminalTextStyles } from '@/shared/utils.js';
+import { FIXED_AGENT_PROVIDERS, isUpdateCheckDisabled, parseFixedAgentSetting, parseFixedWorkdirSetting, terminalTextStyles } from '@/shared/utils.js';
 
 type CliServiceDependencies = {
   applicationRoot: string;
@@ -92,6 +92,21 @@ function describeFixedAgentSetting(environment: CliEnvironment): string {
   return terminalTextStyles.dim('(not set, users choose the agent)');
 }
 
+// Reports the folder CLOUDCLI_FIXED_WORKDIR pins new sessions to, flagging a
+// relative path (which the server ignores) instead of showing it as active.
+function describeFixedWorkdirSetting(environment: CliEnvironment): string {
+  const { path: fixedWorkdir, invalidValue } = parseFixedWorkdirSetting(environment);
+  if (fixedWorkdir) {
+    return terminalTextStyles.bright(fixedWorkdir);
+  }
+  if (invalidValue !== null) {
+    return terminalTextStyles.warn(
+      `[WARN] "${invalidValue}" is not an absolute path or ~/...; ignored, sessions may start in any folder`,
+    );
+  }
+  return terminalTextStyles.dim('(not set, sessions may start in any folder)');
+}
+
 function showStatus(dependencies: CliServiceDependencies): void {
   const { environment, fileSystem, output } = dependencies;
   const databasePath = environment.DATABASE_PATH || dependencies.defaultDatabasePath;
@@ -124,6 +139,7 @@ function showStatus(dependencies: CliServiceDependencies): void {
   output.log(`       CLOUDCLI_DISABLE_UPDATE_CHECK: ${terminalTextStyles.dim(environment.CLOUDCLI_DISABLE_UPDATE_CHECK || '(not set)')}`);
   output.log(`       NO_UPDATE_NOTIFIER: ${terminalTextStyles.dim(environment.NO_UPDATE_NOTIFIER || '(not set)')}`);
   output.log(`       CLOUDCLI_FIXED_AGENT: ${describeFixedAgentSetting(environment)}`);
+  output.log(`       CLOUDCLI_FIXED_WORKDIR: ${describeFixedWorkdirSetting(environment)}`);
   output.log(`\n${terminalTextStyles.info('[INFO]')} Claude Projects Folder:`);
   output.log(`       ${terminalTextStyles.dim(claudeProjectsPath)}`);
   output.log(`       Status: ${fileSystem.pathExists(claudeProjectsPath)
@@ -182,6 +198,7 @@ Environment Variables:
   CLOUDCLI_DISABLE_UPDATE_CHECK  Disable automatic update checks (true/1)
   NO_UPDATE_NOTIFIER  Also disables update checks (any non-empty value)
   CLOUDCLI_FIXED_AGENT  Fix the chat agent: claude, codex, cursor or opencode (hides the agent picker)
+  CLOUDCLI_FIXED_WORKDIR  Allow new sessions only in this folder, e.g. ~/work (hides project creation)
 
 Documentation:
   ${dependencies.packageMetadata.homepage || 'https://github.com/siteboon/claudecodeui'}

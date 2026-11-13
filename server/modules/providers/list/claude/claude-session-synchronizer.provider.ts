@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { ephemeralSessionsService } from '@/modules/providers/services/ephemeral-sessions.service.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
@@ -132,6 +133,13 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     });
 
     if (!parsed) {
+      return null;
+    }
+
+    // The login REPL's transcript (and any other server-internal session) must
+    // not create a session row, and with it a project row for its cwd. Both the
+    // watcher and the full scan come through here.
+    if (ephemeralSessionsService.isExcluded(parsed.sessionId)) {
       return null;
     }
 

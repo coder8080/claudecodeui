@@ -6,7 +6,7 @@ import type {
   GitCommandRunner,
   WorktreeFileSystem,
 } from '@/shared/types.js';
-import { AppError, normalizeProjectPath } from '@/shared/utils.js';
+import { AppError, assertFixedWorkdirPath, normalizeProjectPath } from '@/shared/utils.js';
 import {
   listWorktreePorcelainEntries,
   validateWorktreeBranchName,
@@ -67,6 +67,10 @@ export async function createWorktree(
   const worktreePath = normalizeProjectPath(
     path.join(worktreesContainer, sanitizeBranchForDirectoryName(branch)),
   );
+
+  // A worktree becomes its own project, so CLOUDCLI_FIXED_WORKDIR refuses it
+  // here, before `git worktree add` leaves a folder behind.
+  await assertFixedWorkdirPath(worktreePath, 'Worktrees cannot be created; projects can only be created');
 
   if (await fileSystem.pathExists(worktreePath)) {
     throw new AppError(`Folder already exists: ${worktreePath}`, {

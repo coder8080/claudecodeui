@@ -557,3 +557,29 @@ test('startCloneProject offers the GitHub token to no host but github.com', asyn
   }
 });
 
+
+async function withFixedWorkdir(value: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.CLOUDCLI_FIXED_WORKDIR;
+  process.env.CLOUDCLI_FIXED_WORKDIR = value;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_FIXED_WORKDIR;
+    else process.env.CLOUDCLI_FIXED_WORKDIR = previous;
+  }
+}
+
+test('startCloneProject under CLOUDCLI_FIXED_WORKDIR refuses before touching the disk', async () => {
+  await withFixedWorkdir('/workspace/root', async () => {
+    let ensured = false;
+    await assert.rejects(
+      startCloneProject(
+        { workspacePath: '/workspace/root', githubUrl: 'https://github.com/example/repo', userId: 1 },
+        { onProgress: () => undefined, onComplete: () => undefined },
+        buildDependencies({ ensureDirectory: async () => { ensured = true; } }),
+      ),
+      (error: unknown) => error instanceof AppError && error.statusCode === 403 && error.code === 'FIXED_WORKDIR',
+    );
+    assert.equal(ensured, false);
+  });
+});

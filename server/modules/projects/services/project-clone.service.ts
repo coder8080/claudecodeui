@@ -7,7 +7,7 @@ import spawn from 'cross-spawn';
 import { githubTokensDb } from '@/modules/database/index.js';
 import { createProject } from '@/modules/projects/services/project-management.service.js';
 import type { WorkspacePathValidationResult } from '@/shared/types.js';
-import { AppError, validateWorkspacePath } from '@/shared/utils.js';
+import { AppError, assertFixedWorkdirPath, validateWorkspacePath } from '@/shared/utils.js';
 
 type CloneProjectInput = {
   workspacePath: string;
@@ -260,6 +260,13 @@ export async function startCloneProject(
   }
 
   const absolutePath = pathValidation.resolvedPath;
+  const sanitizedGithubUrl = normalizedGithubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
+  const repoName = sanitizedGithubUrl.split('/').pop() || 'repository';
+  const clonePath = path.join(absolutePath, repoName);
+
+  // Checked before anything touches the disk: under CLOUDCLI_FIXED_WORKDIR a
+  // clone would register a second project, so it is refused up front.
+  await assertFixedWorkdirPath(clonePath, 'Projects can only be created');
   await dependencies.ensureDirectory(absolutePath);
 
   let githubToken: string | null = null;
@@ -285,10 +292,6 @@ export async function startCloneProject(
   } else if (input.newGithubToken && input.newGithubToken.trim().length > 0) {
     githubToken = input.newGithubToken.trim();
   }
-
-  const sanitizedGithubUrl = normalizedGithubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
-  const repoName = sanitizedGithubUrl.split('/').pop() || 'repository';
-  const clonePath = path.join(absolutePath, repoName);
 
   if (await dependencies.pathExists(clonePath)) {
     throw new AppError(

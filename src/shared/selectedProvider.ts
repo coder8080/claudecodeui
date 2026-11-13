@@ -1,5 +1,4 @@
-import { api } from '@/shared/api';
-import { HEALTH_REQUEST_TIMEOUT_MS } from '@/shared/constants';
+import { loadHealthSettings } from '@/shared/healthSettings';
 import type { LLMProvider } from '@/shared/types';
 import { readUserPreference, writeUserPreference } from '@/shared/userSettings';
 
@@ -60,8 +59,7 @@ export function writeSelectedProvider(provider: LLMProvider): void {
 export function loadFixedProvider(): Promise<void> {
   fixedProviderRequest ??= (async () => {
     try {
-      const response = await api.health(AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS));
-      const data = (await response.json()) as { fixedAgent?: unknown };
+      const data = await loadHealthSettings();
       if (PROVIDERS.includes(data.fixedAgent as LLMProvider)) {
         fixedProvider = data.fixedAgent as LLMProvider;
       }

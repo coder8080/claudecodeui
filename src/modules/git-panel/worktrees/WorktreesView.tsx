@@ -12,6 +12,7 @@ import {
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useFixedWorkdir } from '@/shared/hooks/useFixedWorkdir';
 import type { Project,WorktreeInfo } from '@/shared/types';
 import { useWorktreesController } from '@/modules/git-panel/hooks/useWorktreesController';
 import MergeWorktreeModal from '@/modules/git-panel/modals/MergeWorktreeModal';
@@ -185,6 +186,10 @@ export default function WorktreesView({
   } = useWorktreesController({ selectedProject, onProjectSelect, onProjectsRefresh });
 
   const [showNewWorktreeModal, setShowNewWorktreeModal] = useState(false);
+  // A worktree becomes its own project, which CLOUDCLI_FIXED_WORKDIR forbids;
+  // existing worktrees can still be merged and removed, and opened only when
+  // they are already registered as projects (the server refuses a new one).
+  const canCreateWorktree = useFixedWorkdir() === null;
   const [mergeTarget, setMergeTarget] = useState<WorktreeInfo | null>(null);
   const [removeTarget, setRemoveTarget] = useState<WorktreeInfo | null>(null);
 
@@ -216,14 +221,16 @@ export default function WorktreesView({
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
-          <button
-            onClick={() => setShowNewWorktreeModal(true)}
-            disabled={!worktreeData}
-            className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t('git:worktrees.newWorktree')}
-          </button>
+          {canCreateWorktree && (
+            <button
+              onClick={() => setShowNewWorktreeModal(true)}
+              disabled={!worktreeData}
+              className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('git:worktrees.newWorktree')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -256,7 +263,7 @@ export default function WorktreesView({
         ))}
 
         {/* Explainer under the list while only the main worktree exists */}
-        {linkedWorktreeCount === 0 && (
+        {linkedWorktreeCount === 0 && canCreateWorktree && (
           <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
             <GitFork className="h-10 w-10 text-muted-foreground opacity-30" />
             <div>
@@ -278,7 +285,7 @@ export default function WorktreesView({
       </div>
 
       <NewWorktreeModal
-        isOpen={showNewWorktreeModal}
+        isOpen={showNewWorktreeModal && canCreateWorktree}
         baseBranch={worktreeData?.baseBranch ?? null}
         localBranches={localBranches}
         repositoryRoot={worktreeData?.repositoryRoot ?? ''}

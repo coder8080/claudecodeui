@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -5,7 +6,7 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
-import { parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
+import { getFixedWorkdir, isFixedWorkdirPath, parseIncomingJsonObject, stripAnsiSequences } from '@/shared/utils.js';
 
 type ShellIncomingMessage = {
   type?: string;
@@ -120,7 +121,39 @@ type ShellWebSocketDependencies = {
     provider: string,
   ) => string | null | undefined;
   spawnPty?: typeof pty.spawn;
+  /**
+   * Keeps the Claude login REPL out of the session index and deletes its
+   * transcript when the PTY exits (the providers module's
+   * `ephemeralSessionsService`). Optional so tests can omit it.
+   */
+  ephemeralSessions?: {
+    exclude: (providerSessionId: string) => void;
+    discard: (providerSessionId: string) => Promise<void>;
+  };
 };
+
+// `claude ... /login` as the login modal launches it. A command that already
+// picks its session (`--session-id`, `--resume`, `--continue`) is left alone.
+const CLAUDE_LOGIN_COMMAND_PATTERN = /^\s*claude(?=\s)(?=.*\s\/login(?:\s|$))/;
+const CLAUDE_SESSION_SELECTION_FLAG_PATTERN = /\s(?:--session-id|--resume|-r|--continue|-c)(?:[\s=]|$)/;
+
+/**
+ * Gives a Claude login REPL a session id the server knows, so its transcript
+ * can be kept out of the sidebar and deleted afterwards. The REPL keeps running
+ * after a successful login and writes a transcript in its cwd like any other
+ * session; left alone, that cwd (the server's launch folder) becomes a project.
+ * Returns null for any other command, which is then launched unchanged.
+ */
+function assignClaudeLoginSessionId(command: string): { command: string; sessionId: string } | null {
+  if (!CLAUDE_LOGIN_COMMAND_PATTERN.test(command) || CLAUDE_SESSION_SELECTION_FLAG_PATTERN.test(command)) {
+    return null;
+  }
+  const sessionId = randomUUID();
+  return {
+    command: command.replace(/^(\s*claude)(?=\s)/, `$1 --session-id ${sessionId}`),
+    sessionId,
+  };
+}
 
 /**
  * Reads a string field from untyped payloads and falls back when absent.
@@ -209,7 +242,10 @@ type ShellLaunch = {
 function buildShellCommand(
   message: ShellIncomingMessage,
   dependencies: ShellWebSocketDependencies,
-  projectPath: string
+  projectPath: string,
+  // False outside the CLOUDCLI_FIXED_WORKDIR folder: a failed resume must not
+  // fall back to starting a fresh session there.
+  allowFreshFallback = true,
 ): ShellLaunch {
   const hasSession = readBoolean(message.hasSession);
   const initialCommand = readString(message.initialCommand);
@@ -236,9 +272,15 @@ function buildShellCommand(
   if (provider === 'codex') {
     if (resumeSessionId) {
       if (os.platform() === 'win32') {
-        return otherProgram(`codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`);
+        return otherProgram(
+        allowFreshFallback
+          ? `codex resume "${resumeSessionId}"; if ($LASTEXITCODE -ne 0) { codex }`
+          : `codex resume "${resumeSessionId}"`,
+      );
       }
-      return otherProgram(`codex resume "${resumeSessionId}" || codex`);
+      return otherProgram(
+        allowFreshFallback ? `codex resume "${resumeSessionId}" || codex` : `codex resume "${resumeSessionId}"`,
+      );
     }
     return otherProgram('codex');
   }
@@ -259,9 +301,12 @@ function buildShellCommand(
   const theme = buildClaudeThemeLaunch(readColorScheme(message.colorScheme), projectPath);
   const launchFlags = `${bypassFlag}${theme.flag}`;
   if (resumeSessionId) {
-    const command = os.platform() === 'win32'
-      ? `claude --resume "${resumeSessionId}"${launchFlags}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
-      : `claude --resume "${resumeSessionId}"${launchFlags} || claude${launchFlags}`;
+    const resumeCommand = `claude --resume "${resumeSessionId}"${launchFlags}`;
+    const command = !allowFreshFallback
+      ? resumeCommand
+      : os.platform() === 'win32'
+        ? `${resumeCommand}; if ($LASTEXITCODE -ne 0) { claude${launchFlags} }`
+        : `${resumeCommand} || claude${launchFlags}`;
     return { command, claudeFollowsAppTheme: theme.followsAppTheme };
   }
   if (initialCommand) {
@@ -627,17 +672,51 @@ export function handleShellConnection(
           return;
         }
 
+        // CLOUDCLI_FIXED_WORKDIR: a terminal that starts a *new* agent session
+        // must do so in the fixed folder. Resuming an existing session and plain
+        // shells (the login modal among them) are not restricted; a terminal is
+        // not a sandbox anyway. "Resuming" means a provider id actually resolved
+        // (a `hasSession` flag alone would start a fresh CLI), and a failed
+        // resume outside the folder does not fall back to a fresh session.
+        // Without a lock nothing is awaited, so the launch stays synchronous.
+        const fixedWorkdir = getFixedWorkdir();
+        const outsideFixedWorkdir = Boolean(fixedWorkdir)
+          && !isPlainShell
+          && !(await isFixedWorkdirPath(resolvedProjectPath, fixedWorkdir));
+        if (fixedWorkdir && ws.readyState !== WebSocket.OPEN) {
+          // The socket closed during the check: nobody would own the PTY, and
+          // the close handler (which arms the idle timeout) has already run.
+          return;
+        }
+        if (outsideFixedWorkdir && !resolveResumeSessionId(data, dependencies)) {
+          ws.send(
+            JSON.stringify({
+              type: 'output',
+              data: `\x1b[31mNew sessions can only be started in ${fixedWorkdir} (CLOUDCLI_FIXED_WORKDIR).\x1b[0m\r\n`,
+            })
+          );
+          return;
+        }
+
         const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;
         if (sessionId && !safeSessionIdPattern.test(sessionId)) {
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid session ID' }));
           return;
         }
 
-        const { command: shellCommand, claudeFollowsAppTheme } = buildShellCommand(
+        const { command: builtShellCommand, claudeFollowsAppTheme } = buildShellCommand(
           data,
           dependencies,
           resolvedProjectPath,
+          !outsideFixedWorkdir,
         );
+        // The PTY key above was derived from the original command, so a
+        // reattaching login modal still finds this PTY.
+        const claudeLogin = isPlainShell ? assignClaudeLoginSessionId(builtShellCommand) : null;
+        const shellCommand = claudeLogin?.command ?? builtShellCommand;
+        if (claudeLogin) {
+          dependencies.ephemeralSessions?.exclude(claudeLogin.sessionId);
+        }
         const resumeSessionId = resolveResumeSessionId(data, dependencies);
         const claudeColorScheme = claudeFollowsAppTheme ? colorScheme : null;
         const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
@@ -752,6 +831,13 @@ export function handleShellConnection(
         });
 
         shellProcess.onExit((exitCode) => {
+          // Before the early returns below: those concern which socket shows
+          // the exit, while the login transcript must go whichever way the PTY
+          // ended (exit, restart, or the idle timeout's kill).
+          if (claudeLogin) {
+            void dependencies.ephemeralSessions?.discard(claudeLogin.sessionId);
+          }
+
           if (!ptySessionKey) {
             return;
           }

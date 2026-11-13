@@ -117,7 +117,8 @@ type SidebarContentProps = {
   onConversationResultClick: (projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
-  onCreateProject: () => void;
+  /** Absent under CLOUDCLI_FIXED_WORKDIR, which hides the create-project buttons. */
+  onCreateProject?: () => void;
   onCollapseSidebar: () => void;
   updateAvailable: boolean;
   restartRequired: boolean;

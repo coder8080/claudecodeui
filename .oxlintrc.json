@@ -95,6 +95,8 @@
           "src/shared/download.ts",
           "src/shared/uiPreferences.ts",
           "src/shared/selectedProvider.ts",
+          "src/shared/healthSettings.ts",
+          "src/shared/fixedWorkdir.ts",
           "src/shared/authToken.ts",
           "src/shared/voiceConfig.ts",
           "src/shared/codeEditorSettings.ts",

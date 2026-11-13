@@ -81,6 +81,38 @@ test('session creation route names a CloudCLI session from the initial message',
   });
 });
 
+
+async function withFixedWorkdir(value: string, run: () => Promise<void>): Promise<void> {
+  const previous = process.env.CLOUDCLI_FIXED_WORKDIR;
+  process.env.CLOUDCLI_FIXED_WORKDIR = value;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDCLI_FIXED_WORKDIR;
+    else process.env.CLOUDCLI_FIXED_WORKDIR = previous;
+  }
+}
+
+test('session creation route refuses a folder other than CLOUDCLI_FIXED_WORKDIR', async () => {
+  await withProviderServer(async (baseUrl, workspacePath) => {
+    await withFixedWorkdir(workspacePath, async () => {
+      const create = (projectPath: string) => fetch(`${baseUrl}/api/providers/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'claude', projectPath, initialMessage: 'hi' }),
+      });
+
+      const refused = await create(path.join(workspacePath, '..', 'elsewhere'));
+      const refusedPayload = await refused.json() as { error: { code: string } };
+      assert.equal(refused.status, 403);
+      assert.equal(refusedPayload.error.code, 'FIXED_WORKDIR');
+
+      const allowed = await create(workspacePath);
+      assert.equal(allowed.status, 201);
+    });
+  });
+});
+
 test('conversation search streams title matches before transcript results', async () => {
   await withProviderServer(async (baseUrl, workspacePath) => {
     sessionsDb.createAppSession(
